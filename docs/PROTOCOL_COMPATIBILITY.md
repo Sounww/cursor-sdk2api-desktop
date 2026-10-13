@@ -21,8 +21,8 @@ Outer agents (Claude Code, Grok Build) execute their own local file tools in the
 | images (base64) | yes | Mapped to SDK `images` |
 | client tools | yes | `local.customTools` |
 | parallel tools | yes | One assistant batch |
-| tool continuation | yes | Latest user turn must be only `tool_result` |
-| mixed text + tool_result | no | `422 invalid_request` |
+| tool continuation | yes | Latest user turn supplies the pending `tool_result` batch. Text and base64 images in that same turn are delivered with the last result. |
+| mixed text + tool_result | yes | Accepted on the continuation. Extra text is prefixed onto the last tool result; base64 images are attached there. A remote image URL is recorded as `[image]` and is not fetched. |
 | usage / cache | pass-through | Final-only cumulative; omit missing fields |
 | ordinary next turn without session header | yes | Exact transcript lineage reuses the Agent and sends only the current user turn. Unknown, forked, compacted, or mismatched requests cold-rebuild. `ORDINARY_TURN_COORDINATOR=0` disables this. |
 | completed `x-cursor-session-id` follow-up | yes | Store + `Agent.resume` within TTL |
@@ -37,7 +37,7 @@ Outer agents (Claude Code, Grok Build) execute their own local file tools in the
 | `max_tokens` | accepted | Anthropic-required field is parsed/accepted so Claude Code requests work. The SDK Harness has no precise max-token enforcement; the gateway does not emulate one. |
 | `temperature` / `top_p` / `stop_sequences` | advisory / unsupported | Accepted but **not mapped** to `@cursor/sdk`. v0.1 does not claim equivalent sampling behavior. |
 | `tool_choice` | protocol-specific | Messages maps `auto` / `any` / named `tool`; Chat and Responses map `auto` / `required` / named `function` to Harness directives. `parallel_tool_calls=false` and Anthropic `disable_parallel_tool_use` request serial execution. `none` remains fail closed. |
-| `reasoning_effort` | extension | Preserves the public model ID and maps the value to the official SDK `effort` model parameter. The live matrix uses `grok-4.6` plus `reasoning_effort: "xhigh"`; it does not invent an alias model name. |
+| `reasoning_effort` | extension | Maps the value to the official SDK `effort` parameter. A variant id that already ends in `-low`, `-medium`, `-high`, or `-xhigh`, with an optional `-fast`, is rewritten to the requested tier (`grok-4.7-high-fast` plus `xhigh` becomes `grok-4.7-xhigh-fast`). Other model ids stay unchanged. |
 | `cursor_model_params` | extension | Exact validated `{id,value}` pairs passed to the official SDK model selection. Explicit parameters are bound to the session and persisted for completed `Agent.resume`; an explicit change on the same session is `409 cursor_session_conflict`. |
 
 Completed follow-up and persisted `Agent.resume` consume the same global / per-credential active-run limits as `create`. Awaiting `tool_result` continuation does not.

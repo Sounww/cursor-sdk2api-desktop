@@ -7,7 +7,7 @@ import {
   isHostedWebSearchTool,
 } from "../../core/hosted-search.js";
 import type { HostedSearchMode } from "../../core/runtime-profile.js";
-import { collectImages, parseContinuation, parseModelParams } from "../anthropic/parse.js";
+import { collectImages, modelIdWithEffort, parseContinuation, parseModelParams } from "../anthropic/parse.js";
 import type {
   AnthropicContentBlock,
   AnthropicMessage,
@@ -85,11 +85,13 @@ export function parseResponsesRequest(
   );
   assertHostedSearchToolChoice(hostedSearch, toolChoice);
   const systemText = systemParts.filter(Boolean).join("\n");
+  const modelParams = parseModelParams(raw);
+  const model = modelIdWithEffort(raw.model.trim(), modelParams);
 
   return {
     parsed: {
-      model: raw.model.trim(),
-      modelParams: parseModelParams(raw),
+      model,
+      modelParams,
       stream: raw.stream === true,
       systemText,
       messages,
@@ -106,7 +108,7 @@ export function parseResponsesRequest(
         ? { encryptedContent: parsedInput.compactionEncryptedContent }
         : {}),
       sourceDigest: compactTranscriptDigest({
-        model: raw.model.trim(),
+        model,
         systemText,
         messages: parsedInput.sourceMessages,
         tools,

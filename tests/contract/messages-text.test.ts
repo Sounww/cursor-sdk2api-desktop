@@ -61,6 +61,24 @@ test("keeps the public model id and forwards explicit Cursor model parameters", 
   ]);
 });
 
+test("xhigh replaces the effort tier embedded in a Cursor variant model id", async () => {
+  ctx = await startTestApp({
+    sdk: { scripts: [[{ type: "text", chunks: ["ok"] }]] },
+  });
+  const res = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "grok-4.7-high-fast",
+      reasoning_effort: "xhigh",
+      max_tokens: 32,
+      messages: [{ role: "user", content: "hi" }],
+    }),
+  });
+  expect(res.status).toBe(200);
+  expect(ctx.sdk.lastCreate?.modelId).toBe("grok-4.7-xhigh-fast");
+  expect(ctx.sdk.lastCreate?.modelParams).toEqual([{ id: "effort", value: "xhigh" }]);
+});
+
 test("completed follow-up inherits model parameters and rejects an explicit change", async () => {
   ctx = await startTestApp({
     sdk: {

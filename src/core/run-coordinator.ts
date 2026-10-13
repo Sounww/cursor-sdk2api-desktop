@@ -15,7 +15,12 @@ import {
 } from "../errors.js";
 import type { Logger } from "../log.js";
 import type { ParsedMessages, ParsedToolResult } from "../protocols/anthropic/types.js";
-import { renderPrompt } from "../protocols/anthropic/parse.js";
+import {
+  continuationAside,
+  formatContinuationAside,
+  renderPrompt,
+  type ContinuationAside,
+} from "../protocols/anthropic/parse.js";
 import { createAnthropicWriter } from "../protocols/anthropic/writer.js";
 import type { SdkRuntime } from "../sdk/port.js";
 import {
@@ -33,7 +38,7 @@ import type { OrdinaryTurnJournal, OrdinaryTurnRecord } from "./ordinary-turn-jo
 import { Session } from "./session.js";
 import { SessionRegistry } from "./session-registry.js";
 import { SdkRunDriver, type DriveSdkRunInput, type SdkAgentSource } from "./sdk-run-driver.js";
-import { batchDigest } from "./tool-bridge.js";
+import { batchDigest, toSdkToolResult } from "./tool-bridge.js";
 import { buildTranscriptRecovery } from "./transcript-recovery.js";
 import type { LineageRecord, LineageStore } from "./lineage-store.js";
 import type { RuntimeLedger } from "./runtime-ledger.js";
@@ -760,7 +765,8 @@ export class RunCoordinator {
     this.deps.registry.requireLive(session, ids);
     this.assertPendingIdentity(req, session, auth, parsed);
 
-    const digest = batchDigest(results);
+    const aside = continuationAside(parsed.lastUser);
+    const digest = batchDigest(results, aside);
     if (session.lastResultDigest && session.lastResultDigest !== digest) {
       throw sessionConflict("duplicate tool_use_id with a different result digest");
     }
@@ -791,7 +797,7 @@ export class RunCoordinator {
     session.touch(this.deps.clock);
     // Attach the HTTP sink before resolving deferreds so second-turn deltas are not lost.
     const drive = this.drive(req, res, session, session.pump, parsed.stream, requestId, writerFactory);
-    for (const result of results) {
+    for (const [index, result] of results.entries()) {
       const pending = session.pending.get(result.toolUseId);
       if (!pending || pending.resolved) {
         throw sessionConflict(`tool_use_id is not resolvable: ${result.toolUseId}`);
@@ -802,11 +808,7 @@ export class RunCoordinator {
         content: result.content,
         is_error: result.isError,
       });
-      pending.resolve(
-        result.isError
-          ? { content: [{ type: "text", text: result.content }], isError: true }
-          : result.content,
-      );
+      pending.resolve(toSdkToolResult(result, index === results.length - 1 ? aside : undefined));
     }
     this.persistLedgerToolResults(session, results);
     await drive;
@@ -869,7 +871,7 @@ export class RunCoordinator {
     });
     session.hostedSearch = parsed.hostedSearch === true;
     this.beginOrdinaryReplaySegment(session, auth, parsed);
-    session.lastResultDigest = batchDigest(results);
+    session.lastResultDigest = batchDigest(results, continuationAside(parsed.lastUser));
     try {
       const pump = await this.startAndBind(
         {
@@ -924,14 +926,15 @@ export class RunCoordinator {
       throw sessionConflict(`tool catalog is missing recovered tools: ${[...new Set(missingTools)].join(",")}`);
     }
 
-    const digest = batchDigest(results);
+    const aside = continuationAside(parsed.lastUser);
+    const digest = batchDigest(results, aside);
     const inFlight = this.pendingRecoveries.get(record.sessionId);
     if (inFlight && inFlight.digest !== digest) {
       throw sessionConflict("conflicting concurrent tool results for the stored session");
     }
     let recovery = inFlight;
     if (!recovery) {
-      const promise = this.openPendingLineage(auth, parsed, results, record, digest);
+      const promise = this.openPendingLineage(auth, parsed, results, record, digest, aside);
       recovery = { digest, promise };
       this.pendingRecoveries.set(record.sessionId, recovery);
       void promise.finally(() => {
@@ -950,6 +953,7 @@ export class RunCoordinator {
     results: ParsedToolResult[],
     record: LineageRecord,
     digest: string,
+    aside = continuationAside(parsed.lastUser),
   ): Promise<{ session: Session; pump: EventPump }> {
     const boundProfile = record.runtimeProfile ?? DEFAULT_RUNTIME_PROFILE;
     this.deps.registry.assertCanActivateRun({
@@ -983,7 +987,11 @@ export class RunCoordinator {
             apiKey: auth.cursorApiKey,
             workspaceDir: this.workspaceFor(boundProfile),
           },
-          send: { text: recoveredToolResultPrompt(record, results), force: true },
+          send: {
+            text: recoveredToolResultPrompt(record, results, aside),
+            ...(aside && aside.images.length > 0 ? { images: aside.images } : {}),
+            force: true,
+          },
         },
         this.logicalKeyFor(auth, parsed),
       );
@@ -1567,18 +1575,24 @@ export class RunCoordinator {
   }
 }
 
-function recoveredToolResultPrompt(record: LineageRecord, results: ParsedToolResult[]): string {
+function recoveredToolResultPrompt(
+  record: LineageRecord,
+  results: ParsedToolResult[],
+  aside?: ContinuationAside,
+): string {
   const names = new Map((record.pendingCalls ?? []).map((call) => [call.toolUseId, call.name]));
   const lines = results.map(
     (result) =>
       `TOOL_RESULT tool_use_id=${result.toolUseId} tool=${names.get(result.toolUseId) ?? "unknown"} is_error=${result.isError} content=${JSON.stringify(result.content)}`,
   );
+  const note = aside ? formatContinuationAside(aside) : "";
   return [
     "HOST_RECOVERY:",
     "The host process restarted while your external tool calls were waiting for results.",
     "Continue the same task from the persisted agent checkpoint using these exact results.",
     "Do not repeat the completed tool calls. You may call other tools only if the task still requires them.",
     ...lines,
+    ...(note ? ["", note] : []),
   ].join("\n");
 }
 

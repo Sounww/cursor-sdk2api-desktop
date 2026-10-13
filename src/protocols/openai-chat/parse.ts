@@ -1,5 +1,5 @@
 import { invalidRequest } from "../../errors.js";
-import { collectImages, parseContinuation, parseModelParams } from "../anthropic/parse.js";
+import { collectImages, modelIdWithEffort, parseContinuation, parseModelParams } from "../anthropic/parse.js";
 import type {
   AnthropicContentBlock,
   AnthropicMessage,
@@ -80,10 +80,11 @@ export function parseChatCompletionsRequest(body: unknown): ParsedChatCompletion
     "Chat Completions",
   );
 
+  const modelParams = parseModelParams(raw);
   return {
     parsed: {
-      model: raw.model.trim(),
-      modelParams: parseModelParams(raw),
+      model: modelIdWithEffort(raw.model.trim(), modelParams),
+      modelParams,
       stream: raw.stream === true,
       systemText: systemParts.filter(Boolean).join("\n"),
       messages,

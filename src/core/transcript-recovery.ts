@@ -1,6 +1,12 @@
 import { digestJson } from "../digest.js";
 import { sessionLost } from "../errors.js";
-import { asBlocks, renderPrompt, stringifyToolResult } from "../protocols/anthropic/parse.js";
+import {
+  asBlocks,
+  continuationAside,
+  formatContinuationAside,
+  renderPrompt,
+  stringifyToolResult,
+} from "../protocols/anthropic/parse.js";
 import type { ParsedMessages, ParsedToolResult } from "../protocols/anthropic/types.js";
 import type { SdkCustomToolResult } from "../sdk/port.js";
 import { completedToolSignature } from "./tool-bridge.js";
@@ -95,6 +101,8 @@ export function buildTranscriptRecovery(
     const call = calls.get(result.toolUseId) as TranscriptCall;
     return `TOOL_RESULT tool_use_id=${result.toolUseId} tool=${call.name} is_error=${result.isError} content=${JSON.stringify(result.content)}`;
   });
+  const aside = continuationAside(parsed.lastUser);
+  const note = aside ? formatContinuationAside(aside) : "";
   const prompt = [
     rendered.text,
     "HOST_SESSION_RECOVERY:",
@@ -102,6 +110,7 @@ export function buildTranscriptRecovery(
     "Continue the same task. Treat every completed tool call as already executed exactly once and do not repeat its external side effect.",
     "If you request an identical completed call, the host will replay its recorded result. Call only genuinely new tools if the task still requires them.",
     ...lines,
+    ...(note ? [note] : []),
   ].join("\n\n");
 
   return {

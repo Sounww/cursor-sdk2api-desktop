@@ -47,9 +47,10 @@ export function parseMessagesRequest(body: unknown): ParsedMessages {
     names,
   );
 
+  const modelParams = parseModelParams(raw);
   return {
-    model: raw.model.trim(),
-    modelParams: parseModelParams(raw),
+    model: modelIdWithEffort(raw.model.trim(), modelParams),
+    modelParams,
     stream: raw.stream === true,
     systemText: parseSystem(raw.system),
     messages,
@@ -103,6 +104,22 @@ export function parseModelParams(raw: Record<string, unknown>): Array<{ id: stri
   return [...params.entries()]
     .map(([id, value]) => ({ id, value }))
     .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+const EMBEDDED_EFFORT = /^(.*)-(low|medium|high|xhigh)(-fast)?$/;
+
+/** Replace a Cursor variant tier baked into the model id when the request names a different effort. */
+export function modelIdWithEffort(
+  modelId: string,
+  params: ReadonlyArray<{ id: string; value: string }>,
+): string {
+  const effort = params.find((param) => param.id === "effort")?.value;
+  if (effort !== "low" && effort !== "medium" && effort !== "high" && effort !== "xhigh") {
+    return modelId;
+  }
+  const match = EMBEDDED_EFFORT.exec(modelId);
+  if (!match?.[1] || match[2] === effort) return modelId;
+  return `${match[1]}-${effort}${match[3] ?? ""}`;
 }
 
 function parseMessage(value: unknown): AnthropicMessage {
@@ -246,21 +263,66 @@ function parseSystem(value: unknown): string {
   throw invalidRequest("system must be a string or text block array");
 }
 
+export interface ContinuationAside {
+  text: string;
+  images: Array<{ data: string; mimeType: string }>;
+}
+
 export function parseContinuation(lastUser: AnthropicMessage): ParsedToolResult[] | undefined {
   const blocks = asBlocks(lastUser.content);
-  const hasToolResult = blocks.some((block) => block.type === "tool_result");
-  if (!hasToolResult) return undefined;
-  const mixed = blocks.some((block) => block.type !== "tool_result");
-  if (mixed) {
-    throw invalidRequest("mixed new text and tool_result in the latest user turn is not allowed");
+  const results = blocks.filter(
+    (block): block is Extract<AnthropicContentBlock, { type: "tool_result" }> => block.type === "tool_result",
+  );
+  if (results.length === 0) return undefined;
+  return results.map((block) => ({
+    toolUseId: block.tool_use_id,
+    content: stringifyToolResult(block.content),
+    isError: block.is_error === true,
+  }));
+}
+
+/** Non-tool blocks that share the latest user turn with tool_result. */
+export function continuationAside(message: AnthropicMessage | undefined): ContinuationAside | undefined {
+  if (!message) return undefined;
+  const blocks = asBlocks(message.content);
+  if (!blocks.some((block) => block.type === "tool_result")) return undefined;
+  const textParts: string[] = [];
+  const images: ContinuationAside["images"] = [];
+  for (const block of blocks) {
+    if (block.type === "tool_result") continue;
+    if (block.type === "text") {
+      if (block.text.trim()) textParts.push(block.text);
+      continue;
+    }
+    if (block.type === "thinking") {
+      if (block.thinking.trim()) textParts.push(block.thinking);
+      continue;
+    }
+    if (block.type === "tool_use") {
+      textParts.push(`[tool_use ${block.name} ${block.id}] input=${JSON.stringify(block.input ?? {})}`);
+      continue;
+    }
+    if (block.type === "image" && block.source.type === "base64") {
+      images.push({ data: block.source.data, mimeType: block.source.media_type });
+      continue;
+    }
+    if (block.type === "image" && block.source.type === "url") {
+      textParts.push("[image]");
+    }
   }
-  return blocks
-    .filter((block): block is Extract<AnthropicContentBlock, { type: "tool_result" }> => block.type === "tool_result")
-    .map((block) => ({
-      toolUseId: block.tool_use_id,
-      content: stringifyToolResult(block.content),
-      isError: block.is_error === true,
-    }));
+  const text = textParts.join("\n");
+  if (!text && images.length === 0) return undefined;
+  return { text, images };
+}
+
+export function formatContinuationAside(aside: ContinuationAside): string {
+  if (aside.text) {
+    return `The user also sent this alongside the tool results:\n${aside.text}`;
+  }
+  if (aside.images.length > 0) {
+    return "The user also sent images alongside the tool results.";
+  }
+  return "";
 }
 
 export function asBlocks(content: string | AnthropicContentBlock[]): AnthropicContentBlock[] {

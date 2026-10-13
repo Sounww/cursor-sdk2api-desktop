@@ -349,9 +349,29 @@ test("successful tool_result still resolves as a plain string", async () => {
   expect(ctx.sdk.agents[0]?.runs[0]?.capturedToolResults).toEqual(["72F"]);
 });
 
-test("mixed new text and tool_result is rejected", async () => {
-  ctx = await startTestApp();
-  const res = await api(ctx, "/v1/messages", {
+test("mixed new text and tool_result is delivered with the tool result", async () => {
+  ctx = await startTestApp({
+    sdk: {
+      scripts: [
+        [
+          { type: "tools", calls: [{ name: "lookup", input: { q: "ok" } }] },
+          { type: "text", chunks: ["done"] },
+        ],
+      ],
+    },
+  });
+  const first = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "composer-2.5",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "go" }],
+      tools: [weatherTool()],
+    }),
+  });
+  const turn = (await first.json()) as { content: Array<{ type: string; id?: string }> };
+  const id = turn.content.find((block) => block.type === "tool_use")?.id;
+  const second = await api(ctx, "/v1/messages", {
     method: "POST",
     body: JSON.stringify({
       model: "composer-2.5",
@@ -361,13 +381,28 @@ test("mixed new text and tool_result is rejected", async () => {
           role: "user",
           content: [
             { type: "text", text: "also do this" },
-            { type: "tool_result", tool_use_id: "toolu_x", content: "1" },
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/png", data: "aGVsbG8=" },
+            },
+            { type: "tool_result", tool_use_id: id, content: "72F" },
           ],
         },
       ],
+      tools: [weatherTool()],
     }),
   });
-  const body = (await res.json()) as { error: { type: string } };
-  expect(res.status).toBe(422);
-  expect(body.error.type).toBe("invalid_request");
+  expect(second.status).toBe(200);
+  expect(ctx.sdk.agents[0]?.runs[0]?.capturedToolResults).toEqual([
+    {
+      content: [
+        { type: "text", text: "72F" },
+        {
+          type: "text",
+          text: "The user also sent this alongside the tool results:\nalso do this",
+        },
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+      ],
+    },
+  ]);
 });

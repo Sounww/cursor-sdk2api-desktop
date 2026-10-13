@@ -13,6 +13,8 @@
 
 ## Unreleased
 
+- An explicit effort now replaces a Cursor variant tier embedded in the model id. `grok-4.7-high-fast` with `reasoning_effort: "xhigh"` is sent as `grok-4.7-xhigh-fast` plus `effort=xhigh`. Model ids without that suffix are unchanged.
+- A latest user turn may mix `tool_result` with new text or images. The gateway still resolves the pending tool batch, and attaches that extra text and any base64 images to the last result instead of rejecting the request.
 - Ordinary turns now follow BeefAPI's Cursor Agent contract: a typed turn IR, exact-lineage Agent reuse, and `send(current turn)` instead of flattening the whole transcript on every request. Tool continuation, `x-cursor-session-id` follow-up, and cold rebuild remain. Disable with `ORDINARY_TURN_COORDINATOR=0`.
 
 - `/v1/messages` accepts sub2api compatibility roles without flattening the transcript: `system`/`developer` remain in order, historical `tool`/`function` output stays visible to the Harness, and a trailing tool result requires a real call id before entering continuation lookup.
