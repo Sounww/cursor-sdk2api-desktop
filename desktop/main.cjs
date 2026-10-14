@@ -129,6 +129,7 @@ async function boot() {
       width: 1100,
       height: 800,
       title: "cursor-sdk2api",
+      icon: join(__dirname, "icon.png"),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,

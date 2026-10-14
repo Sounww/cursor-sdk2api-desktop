@@ -71,12 +71,14 @@
     "files": [
       "dist/**/*",
       "desktop/main.cjs",
+      "desktop/icon.png",
       "package.json"
     ],
     "extraMetadata": {
       "main": "desktop/main.cjs"
     },
     "win": {
+      "icon": "desktop/icon.png",
       "target": [
         "nsis"
       ]
