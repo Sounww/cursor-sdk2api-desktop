@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { addManagedAccount, getDesktopSettings, getHealth, getManagedAccounts, probeManagedAccount, removeManagedAccount, runPrompt, saveDesktopSettings, setManagedDefaultProfile } from "./api";
+import { addManagedAccount, getConsoleModels, getDesktopSettings, getHealth, getManagedAccounts, probeManagedAccount, removeManagedAccount, runPrompt, saveDesktopSettings, setManagedDefaultProfile, type ConsoleModelCatalog } from "./api";
 import { go, hrefFor, readRoute, type Route } from "./nav";
 import { RailNav } from "./RailNav";
 import { AccountDetailPage } from "./pages/AccountDetailPage";
@@ -7,6 +7,7 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { ConnectPage } from "./pages/ConnectPage";
 import type { RecipeName } from "./recipes";
 import { HomePage, type HomeCopy } from "./pages/HomePage";
+import { ModelsPage } from "./pages/ModelsPage";
 import { PlaygroundPage } from "./pages/PlaygroundPage";
 import { QuotaPage } from "./pages/QuotaPage";
 import { BFTheme } from "./bflabs/BFTheme";
@@ -29,11 +30,13 @@ const COPY = {
     navHome: "Home",
     navStart: "Quick start",
     navAccounts: "Accounts",
+    navModels: "Models",
     navQuota: "Quota",
     navPlay: "Playground",
     navHomeMeta: "Runtime and API URLs",
     navStartMeta: "Client recipes",
     navAccountsMeta: "Persistent credentials",
+    navModelsMeta: "Catalog from imported accounts",
     navQuotaMeta: "Cursor dashboard usage",
     navPlayMeta: "Messages / Chat / Responses",
     consoleTag: "Local console",
@@ -201,6 +204,18 @@ const COPY = {
       restarting: "Restarting",
       restartBody: "The gateway is restarting on the new port. This window will follow it.",
     },
+    models: {
+      title: "Models",
+      refresh: "Refresh",
+      refreshing: "Refreshing",
+      empty: "Import an account to see its models.",
+      unavailable: "No models came back from the imported accounts.",
+      stale: "Showing a cached catalog. Refresh failed.",
+      accounts: "Accounts",
+      copy: "Copy id",
+      copied: "Copied",
+      goAccounts: "Go to accounts",
+    },
     keyNeeded: "Paste a Cursor API key first.",
   },
   zh: {
@@ -212,11 +227,13 @@ const COPY = {
     navHome: "首页",
     navStart: "快速开始",
     navAccounts: "账号",
+    navModels: "模型",
     navQuota: "配额",
     navPlay: "协议试跑",
     navHomeMeta: "运行控制和 API 地址",
     navStartMeta: "客户端配方",
     navAccountsMeta: "持久化凭证",
+    navModelsMeta: "已导入账号的模型目录",
     navQuotaMeta: "官方限额",
     navPlayMeta: "Messages / Chat / Responses",
     consoleTag: "本机控制台",
@@ -384,6 +401,18 @@ const COPY = {
       restarting: "正在重启",
       restartBody: "网关正在用新端口重启，这个窗口会跟过去。",
     },
+    models: {
+      title: "模型",
+      refresh: "刷新",
+      refreshing: "刷新中",
+      empty: "先导入账号，才能看到它能用的模型。",
+      unavailable: "已导入的账号没有返回模型。",
+      stale: "目录刷新失败，下面是缓存。",
+      accounts: "账号",
+      copy: "复制 id",
+      copied: "已复制",
+      goAccounts: "去账号页",
+    },
     keyNeeded: "先粘贴一把 Cursor Key。",
   },
 } as const;
@@ -420,6 +449,9 @@ export function App() {
   const [desktopSaving, setDesktopSaving] = useState(false);
   const [desktopRestarting, setDesktopRestarting] = useState(false);
   const [desktopError, setDesktopError] = useState("");
+  const [catalog, setCatalog] = useState<ConsoleModelCatalog>();
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const t = COPY[language];
   const origin = window.location.origin;
   const active = roster.find((item) => item.id === activeId);
@@ -445,6 +477,23 @@ export function App() {
   useEffect(() => {
     void refreshHealth();
   }, []);
+
+  const refreshCatalog = async () => {
+    setCatalogLoading(true);
+    try {
+      setCatalog(await getConsoleModels());
+      setCatalogError("");
+    } catch (error: unknown) {
+      setCatalogError(messageOf(error));
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (route.page !== "models") return;
+    void refreshCatalog();
+  }, [route.page]);
 
   useEffect(() => {
     void getDesktopSettings().then((settings) => {
@@ -673,11 +722,13 @@ export function App() {
           home={t.navHome}
           quota={t.navQuota}
           accounts={t.navAccounts}
+          models={t.navModels}
           connect={t.navStart}
           playground={t.navPlay}
           homeMeta={t.navHomeMeta}
           quotaMeta={t.navQuotaMeta}
           accountsMeta={t.navAccountsMeta}
+          modelsMeta={t.navModelsMeta}
           startMeta={t.navStartMeta}
           playMeta={t.navPlayMeta}
           accountCount={roster.length}
@@ -685,6 +736,7 @@ export function App() {
             home: <NavIcon name="home" />,
             quota: <NavIcon name="quota" />,
             key: <NavIcon name="key" />,
+            models: <NavIcon name="models" />,
             start: <NavIcon name="start" />,
             play: <NavIcon name="play" />,
           }}
@@ -755,6 +807,17 @@ export function App() {
             profileError={profileError}
           />
         ) : null}
+        {route.page === "models" ? (
+          <ModelsPage
+            t={t.models}
+            catalog={catalog}
+            loading={catalogLoading}
+            error={catalogError}
+            copied={copied}
+            onRefresh={() => void refreshCatalog()}
+            onCopy={copyValue}
+          />
+        ) : null}
         {route.page === "playground" ? (
           <PlaygroundPage
             t={t.play}
@@ -812,6 +875,7 @@ function pageLabelFor(page: Route["page"], t: (typeof COPY)["en"] | (typeof COPY
   if (page === "connect") return t.navStart;
   if (page === "accounts" || page === "account") return t.navAccounts;
   if (page === "quota") return t.navQuota;
+  if (page === "models") return t.navModels;
   if (page === "playground") return t.navPlay;
   return t.navHome;
 }
@@ -820,7 +884,7 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed";
 }
 
-function NavIcon({ name }: { name: "home" | "quota" | "key" | "start" | "play" }) {
+function NavIcon({ name }: { name: "home" | "quota" | "key" | "models" | "start" | "play" }) {
   const d =
     name === "home"
       ? "M3 10.5 12 3l9 7.5V21H14V14H10v7H3Z"
@@ -828,9 +892,11 @@ function NavIcon({ name }: { name: "home" | "quota" | "key" | "start" | "play" }
         ? "M12 3a9 9 0 1 0 9 9h-4a5 5 0 1 1-5-5V3Zm1 1.1V11h6.9A8 8 0 0 0 13 4.1Z"
         : name === "key"
           ? "M8 14a5 5 0 1 1 4.9-6H21v3h-2v3h-3v2h-3.1A5 5 0 0 1 8 14Zm0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"
-          : name === "start"
-            ? "M8 5v14l11-7Z"
-            : "M4 5h10v4H8v6h6v4H4Zm12 3 5 4-5 4Z";
+          : name === "models"
+            ? "M4 5h16v3H4Zm0 5.5h16v3H4Zm0 5.5h10v3H4Z"
+            : name === "start"
+              ? "M8 5v14l11-7Z"
+              : "M4 5h10v4H8v6h6v4H4Zm12 3 5 4-5 4Z";
   return (
     <svg className="nav-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
       <path fill="currentColor" d={d} />

@@ -1,4 +1,4 @@
-export type Page = "home" | "accounts" | "account" | "quota" | "playground" | "connect";
+export type Page = "home" | "accounts" | "account" | "quota" | "models" | "playground" | "connect";
 
 export interface Route {
   page: Page;
@@ -11,6 +11,7 @@ export function readRoute(): Route {
   if (head === "accounts" && id) return { page: "account", accountId: id };
   if (head === "accounts") return { page: "accounts" };
   if (head === "quota") return { page: "quota" };
+  if (head === "models") return { page: "models" };
   if (head === "playground") return { page: "playground" };
   if (head === "connect") return { page: "connect" };
   return { page: "home" };

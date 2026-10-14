@@ -112,6 +112,62 @@ async function listManagedModels(accounts: StoredCursorAccount[], catalog: Model
   };
 }
 
+async function listConsoleModels(accounts: StoredCursorAccount[], catalog: ModelCatalog): Promise<{
+  status: "ok" | "unavailable" | "stale";
+  reason?: string;
+  models: Array<{
+    id: string;
+    display_name?: string;
+    description?: string;
+    accounts: Array<{ id: string; key_hint: string }>;
+  }>;
+}> {
+  if (accounts.length === 0) {
+    return {
+      status: "unavailable",
+      reason: "cursor_account_pool_empty",
+      models: [],
+    };
+  }
+  const results = await Promise.all(
+    accounts.map(async (account) => ({
+      account,
+      listed: await catalog.list(account.apiKey, managedAccountAuth(account.apiKey).fingerprint),
+    })),
+  );
+  const models = new Map<string, {
+    id: string;
+    display_name?: string;
+    description?: string;
+    accounts: Array<{ id: string; key_hint: string }>;
+  }>();
+  for (const { account, listed } of results) {
+    if (listed.status === "unavailable") continue;
+    for (const model of listed.models) {
+      const current = models.get(model.id) ?? {
+        id: model.id,
+        ...(model.displayName ? { display_name: model.displayName } : {}),
+        ...(model.description ? { description: model.description } : {}),
+        accounts: [],
+      };
+      current.accounts.push({ id: account.id, key_hint: account.keyHint });
+      models.set(model.id, current);
+    }
+  }
+  const hasOk = results.some((result) => result.listed.status === "ok");
+  const hasStale = results.some((result) => result.listed.status === "stale");
+  const status = hasOk ? "ok" : hasStale ? "stale" : "unavailable";
+  return {
+    status,
+    ...(status === "unavailable"
+      ? {
+          reason: results.map((result) => result.listed.reason).find(Boolean) ?? "cursor_models_list_unavailable",
+        }
+      : {}),
+    models: [...models.values()].sort((left, right) => left.id.localeCompare(right.id)),
+  };
+}
+
 function managedPreSemanticFailureCanFailover(error: unknown): boolean {
   if (!(error instanceof GatewayError)) return true;
   if (
@@ -577,6 +633,12 @@ export function createApp(input: {
           ...publicAccount(updated),
           account: await accountPayload(updated.apiKey, updated.defaultProfile),
         }, requestId);
+        return;
+      }
+
+      if (path === "/v0/management/models" && method === "GET") {
+        const listed = await listConsoleModels(accounts.list(), catalog);
+        sendJson(res, 200, listed, requestId);
         return;
       }
 

@@ -38,8 +38,27 @@ export async function saveDesktopSettings(
   return (await response.json()) as { restart_required: true; port: number };
 }
 
+export interface ConsoleModel {
+  id: string;
+  display_name?: string;
+  description?: string;
+  accounts: Array<{ id: string; key_hint: string }>;
+}
+
+export interface ConsoleModelCatalog {
+  status: "ok" | "unavailable" | "stale";
+  reason?: string;
+  models: ConsoleModel[];
+}
+
 export async function getModels(apiKey: string): Promise<ModelsPayload> {
   return getJson<ModelsPayload>("/v1/models", apiKey);
+}
+
+export async function getConsoleModels(): Promise<ConsoleModelCatalog> {
+  const response = await fetch("/v0/management/models");
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return (await response.json()) as ConsoleModelCatalog;
 }
 
 export async function getAccount(apiKey: string): Promise<AccountPayload> {
