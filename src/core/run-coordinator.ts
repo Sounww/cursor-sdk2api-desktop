@@ -700,13 +700,7 @@ export class RunCoordinator {
       if (parsed.modelParams.length > 0 && !sameModelParams(lookup.session.modelParams, effectiveParams)) {
         throw sessionConflict("model parameters do not match the live pending session");
       }
-      if (
-        parsed.tools.length > 0 &&
-        lookup.session.executableToolCatalogFingerprint !==
-          executableToolCatalogFingerprint(parsed.tools)
-      ) {
-        throw sessionConflict("session policy does not match the live pending session");
-      }
+      // Callbacks are already registered on this run. A drifted tools array cannot retarget them.
       try {
         await this.continueLiveSession(req, res, auth, parsed, results, lookup.session, requestId, writerFactory);
         return;
@@ -1256,12 +1250,6 @@ export class RunCoordinator {
   ): void {
     this.assertModelIdentity(session, auth, parsed);
     this.assertBoundProfile(req, session);
-    if (
-      parsed.tools.length > 0 &&
-      session.executableToolCatalogFingerprint !== executableToolCatalogFingerprint(parsed.tools)
-    ) {
-      throw sessionConflict("tool catalog does not match the pending session owner");
-    }
   }
 
   private assertModelIdentity(

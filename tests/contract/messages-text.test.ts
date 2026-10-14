@@ -61,6 +61,54 @@ test("keeps the public model id and forwards explicit Cursor model parameters", 
   ]);
 });
 
+test("Claude Code output_config.effort xhigh replaces an embedded high tier", async () => {
+  ctx = await startTestApp({
+    sdk: { scripts: [[{ type: "text", chunks: ["ok"] }]] },
+  });
+  const suffixed = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "grok-4.7-high",
+      max_tokens: 32,
+      output_config: { effort: "xhigh" },
+      messages: [{ role: "user", content: "hi" }],
+    }),
+  });
+  expect(suffixed.status).toBe(200);
+  expect(ctx.sdk.lastCreate?.modelId).toBe("grok-4.7-xhigh");
+  expect(ctx.sdk.lastCreate?.modelParams).toEqual([{ id: "effort", value: "xhigh" }]);
+
+  const bare = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "grok-4.7",
+      max_tokens: 32,
+      output_config: { effort: "xhigh", format: { type: "text" } },
+      messages: [{ role: "user", content: "again" }],
+    }),
+  });
+  expect(bare.status).toBe(200);
+  expect(ctx.sdk.lastCreate?.modelId).toBe("grok-4.7");
+  expect(ctx.sdk.agents.at(-1)?.runs).toHaveLength(1);
+  expect(ctx.sdk.createCalls.at(-1)?.modelParams).toEqual([{ id: "effort", value: "xhigh" }]);
+});
+
+test("conflicting effort fields fail closed", async () => {
+  ctx = await startTestApp();
+  const res = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "grok-4.7-high",
+      max_tokens: 32,
+      reasoning_effort: "high",
+      output_config: { effort: "xhigh" },
+      messages: [{ role: "user", content: "hi" }],
+    }),
+  });
+  expect(res.status).toBe(400);
+  expect(ctx.sdk.lastCreate).toBeUndefined();
+});
+
 test("xhigh replaces the effort tier embedded in a Cursor variant model id", async () => {
   ctx = await startTestApp({
     sdk: { scripts: [[{ type: "text", chunks: ["ok"] }]] },

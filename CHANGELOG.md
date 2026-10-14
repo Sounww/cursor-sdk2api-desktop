@@ -13,7 +13,8 @@
 
 ## Unreleased
 
-- An explicit effort now replaces a Cursor variant tier embedded in the model id. `grok-4.7-high-fast` with `reasoning_effort: "xhigh"` is sent as `grok-4.7-xhigh-fast` plus `effort=xhigh`. Model ids without that suffix are unchanged.
+- Managed-account concurrency now defaults to 8 global and 8 per credential, so Claude Code subagents are not rejected once two runs exist. A run that already produced output and whose client disconnected no longer counts toward that limit.
+- An explicit effort now replaces a Cursor variant tier embedded in the model id. `grok-4.7-high-fast` with `reasoning_effort: "xhigh"` is sent as `grok-4.7-xhigh-fast` plus `effort=xhigh`. Claude Code's `output_config.effort` is read the same way. Grok 4.7 is then sent to Cursor as registry id `grok-4.7` with `reasoning_effort` and `context=256k`, because `effort` and the 500k default are rejected as invalid registry parameters.
 - A latest user turn may mix `tool_result` with new text or images. The gateway still resolves the pending tool batch, and attaches that extra text and any base64 images to the last result instead of rejecting the request.
 - Ordinary turns now follow BeefAPI's Cursor Agent contract: a typed turn IR, exact-lineage Agent reuse, and `send(current turn)` instead of flattening the whole transcript on every request. Tool continuation, `x-cursor-session-id` follow-up, and cold rebuild remain. Disable with `ORDINARY_TURN_COORDINATOR=0`.
 

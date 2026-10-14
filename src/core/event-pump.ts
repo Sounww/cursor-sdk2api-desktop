@@ -63,6 +63,10 @@ export class EventPump {
     this.sinks.delete(sink);
   }
 
+  hasAttachedSink(): boolean {
+    return this.sinks.size > 0;
+  }
+
   /**
    * Start a new HTTP response segment. Only the first real tool_result
    * continuation (awaiting -> resuming) should call this.

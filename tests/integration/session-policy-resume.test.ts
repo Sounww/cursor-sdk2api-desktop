@@ -167,6 +167,101 @@ test("explicit follow-up rejects changed model parameters and namespace", async 
   expect(ctx.sdk.agents[0]?.runs).toHaveLength(1);
 });
 
+test("live pending tool result accepts a drifted catalog on the same run", async () => {
+  const ctx = await startTestApp({
+    sdk: {
+      scripts: [
+        [
+          { type: "tools", calls: [{ name: "lookup", input: { q: "weather" }, id: "call_live" }] },
+          { type: "text", chunks: ["sunny"] },
+        ],
+      ],
+    },
+  });
+  apps.push(ctx);
+  const first = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "composer-2.5",
+      max_tokens: 32,
+      messages: [{ role: "user", content: "weather?" }],
+      tools: [weatherTool()],
+    }),
+  });
+  const toolTurn = (await first.json()) as { content: Array<{ type: string; id?: string }> };
+  expect(first.status).toBe(200);
+  const drifted = weatherTool();
+  drifted.description = "Description refreshed before the tool result";
+  const second = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "composer-2.5",
+      max_tokens: 32,
+      messages: [
+        { role: "user", content: "weather?" },
+        { role: "assistant", content: toolTurn.content },
+        {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "call_live", content: "72F" }],
+        },
+      ],
+      tools: [
+        drifted,
+        {
+          name: "mcp_search",
+          description: "Connected after the tool call",
+          input_schema: { type: "object", properties: { q: { type: "string" } } },
+        },
+      ],
+    }),
+  });
+  const final = (await second.json()) as { content: Array<{ text?: string }>; stop_reason: string };
+  expect(second.status).toBe(200);
+  expect(final.stop_reason).toBe("end_turn");
+  expect(final.content.some((block) => block.text === "sunny")).toBe(true);
+  expect(ctx.sdk.agents).toHaveLength(1);
+  expect(ctx.sdk.agents[0]?.runs).toHaveLength(1);
+  expect(ctx.sdk.agents[0]?.runs[0]?.waitCalls).toBe(1);
+  expect(ctx.sdk.createCalls).toHaveLength(1);
+});
+
+test("live pending tool result still rejects changed model parameters", async () => {
+  const ctx = await startTestApp({
+    sdk: {
+      scripts: [[{ type: "tools", calls: [{ name: "lookup", input: { q: "weather" }, id: "call_effort" }] }]],
+    },
+  });
+  apps.push(ctx);
+  const first = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "composer-2.5",
+      max_tokens: 32,
+      messages: [{ role: "user", content: "weather?" }],
+      tools: [weatherTool()],
+    }),
+  });
+  expect(first.status).toBe(200);
+  const second = await api(ctx, "/v1/messages", {
+    method: "POST",
+    body: JSON.stringify({
+      model: "composer-2.5",
+      max_tokens: 32,
+      reasoning_effort: "low",
+      messages: [
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "call_effort", content: "72F" }] },
+      ],
+      tools: [weatherTool()],
+    }),
+  });
+  const body = (await second.json()) as { error: { message: string } };
+  expect(second.status).toBe(409);
+  expect(body.error.message).toContain("model parameters do not match the live pending session");
+  expect(ctx.sdk.agents).toHaveLength(1);
+  expect(ctx.sdk.agents[0]?.runs).toHaveLength(1);
+  expect(ctx.sdk.createCalls).toHaveLength(1);
+});
+
 test("pending lineage rejects a changed catalog before resume or transcript recovery", async () => {
   const stateDir = mkdtempSync(join(tmpdir(), "cursor-sdk2api-policy-pending-"));
   const firstApp = await startTestApp({

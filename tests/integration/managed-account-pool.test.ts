@@ -185,6 +185,64 @@ test("a busy compatible account returns 429 instead of model-unavailable", async
   }
 });
 
+test("a disconnected run does not keep the compatible account at capacity", async () => {
+  ctx = await startTestApp({
+    config: {
+      authMode: "managed",
+      gatewayAccessKey: "gateway-key",
+      managedCursorKey: undefined,
+      globalActiveRuns: 4,
+      perCredentialActiveRuns: 1,
+      firstEventTimeoutMs: 10_000,
+    },
+    sdk: {
+      modelsByApiKey: {
+        "cursor-a": { ok: true, models: [{ id: "grok-4.7" }] },
+      },
+      agentScripts: [
+        [[{ type: "text", chunks: ["partial"] }, { type: "hang" }]],
+        [[{ type: "text", chunks: ["next"] }]],
+      ],
+    },
+  });
+  await addAccount(ctx, "cursor-a");
+
+  const abort = new AbortController();
+  const hanging = await api(ctx, "/v1/messages", {
+    apiKey: "gateway-key",
+    method: "POST",
+    signal: abort.signal,
+    body: JSON.stringify({ ...messageBody("occupy"), model: "grok-4.7", stream: true }),
+  });
+  const reader = hanging.body?.getReader();
+  if (!reader) throw new Error("missing body");
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (!buf.includes("partial")) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+  }
+  abort.abort();
+  await reader.cancel().catch(() => undefined);
+  await waitFor(
+    () =>
+      [...ctx!.app.registry.sessions.values()].some(
+        (session) => session.state === "running" && session.hasSemanticOutput && !session.pump?.hasAttachedSink(),
+      ),
+    "disconnected run to release its client",
+  );
+
+  const next = await api(ctx, "/v1/messages", {
+    apiKey: "gateway-key",
+    method: "POST",
+    body: JSON.stringify({ ...messageBody("continue"), model: "grok-4.7" }),
+  });
+  expect(next.status).toBe(200);
+  const body = (await next.json()) as { content: Array<{ text?: string }> };
+  expect(body.content.some((item) => item.text === "next")).toBe(true);
+});
+
 test("tool continuation remains pinned to the original account while another session rotates", async () => {
   ctx = await startTestApp({
     config: { authMode: "managed", gatewayAccessKey: "gateway-key", managedCursorKey: undefined },

@@ -23,6 +23,7 @@ import { ensurePrivateDir } from "../core/lineage-store.js";
 import { DEFAULT_RUNTIME_PROFILE, type RuntimeProfile } from "../core/runtime-profile.js";
 import { credentialFingerprint } from "../digest.js";
 import { fetchCursorDashboardQuota } from "../account/cursor-dashboard.js";
+import { cursorModelSelection } from "./model-selection.js";
 import { ensureSandSdkClone } from "./sand-loader.js";
 import { sandStoreDir, sandWorkspaceDir } from "./sand-paths.js";
 
@@ -270,10 +271,7 @@ export function createCursorRuntime(options: { stateDir: string }): SdkRuntime {
     };
     const shared = {
       apiKey: input.apiKey,
-      model: {
-        id: input.modelId,
-        params: input.modelParams,
-      },
+      model: cursorModelSelection(input.modelId, input.modelParams),
       tools: apiProfileToolAllowlist(input.clientToolNames, hostedSearch) as never,
       disallowedTools: ambientDisallowedTools(hostedSearch) as never,
       local,

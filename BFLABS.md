@@ -14,7 +14,9 @@ This is a public MIT gateway built on the official `@cursor/sdk`. Anthropic Mess
 
 ## Continuation and isolation invariants
 
-- Sessions bind to the exact credential fingerprint, model, tool catalog, and pending tool-id batch.
+- Sessions bind to the exact credential fingerprint, model, and pending tool-id batch.
+- A live in-process tool-result delivery may accept a drifted request tool catalog. That path only resolves callbacks already registered on the running Agent.
+- Restart resume, explicit session follow-up, and ordinary Agent reuse still require the exact tool catalog.
 - Duplicate different tool results fail closed.
 - Cold recovery requires a complete transcript whose latest assistant tool batch matches the submitted results.
 - Never blindly re-execute a completed external tool.

@@ -5,6 +5,13 @@ import type { RuntimeProfile } from "./runtime-profile.js";
 
 const ACTIVE_RUN_STATES: ReadonlySet<SessionState> = new Set(["creating", "running", "resuming"]);
 
+/** A client that already went away can reattach, but must not block a new run. */
+function sessionOccupiesRunSlot(session: Session): boolean {
+  if (!ACTIVE_RUN_STATES.has(session.state)) return false;
+  if (session.pump && session.hasSemanticOutput && !session.pump.hasAttachedSink()) return false;
+  return true;
+}
+
 export interface RegistryLimits {
   globalActiveRuns: number;
   perCredentialActiveRuns: number;
@@ -66,7 +73,7 @@ export class SessionRegistry {
     }
     this.sweep();
     const active = [...this.sessions.values()].filter(
-      (session) => ACTIVE_RUN_STATES.has(session.state) && session.sessionId !== input.excludeSessionId,
+      (session) => sessionOccupiesRunSlot(session) && session.sessionId !== input.excludeSessionId,
     );
     if (active.length >= this.limits.globalActiveRuns) {
       throw rateLimited("Global active run limit reached");
@@ -199,7 +206,7 @@ export class SessionRegistry {
   activeRunCountForCredential(credentialFingerprint: string): number {
     return [...this.sessions.values()].filter(
       (session) =>
-        session.credentialFingerprint === credentialFingerprint && ACTIVE_RUN_STATES.has(session.state),
+        session.credentialFingerprint === credentialFingerprint && sessionOccupiesRunSlot(session),
     ).length;
   }
 

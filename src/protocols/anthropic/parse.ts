@@ -85,18 +85,11 @@ export function parseModelParams(raw: Record<string, unknown>): Array<{ id: stri
     }
   }
 
-  const reasoning = raw.reasoning as Record<string, unknown> | undefined;
-  const effort =
-    typeof raw.reasoning_effort === "string"
-      ? raw.reasoning_effort
-      : reasoning && typeof reasoning.effort === "string"
-        ? reasoning.effort
-        : undefined;
+  const effort = readEffort(raw);
   if (effort) {
-    if (effort.length > 128) throw invalidRequest("reasoning_effort is too long");
     const existing = params.get("effort");
     if (existing && existing !== effort) {
-      throw invalidRequest("reasoning_effort conflicts with cursor_model_params effort");
+      throw invalidRequest("effort conflicts with cursor_model_params effort");
     }
     params.set("effort", effort);
   }
@@ -104,6 +97,33 @@ export function parseModelParams(raw: Record<string, unknown>): Array<{ id: stri
   return [...params.entries()]
     .map(([id, value]) => ({ id, value }))
     .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function readEffort(raw: Record<string, unknown>): string | undefined {
+  const named: Array<[string, unknown]> = [];
+  if (typeof raw.reasoning_effort === "string") named.push(["reasoning_effort", raw.reasoning_effort]);
+  const reasoning = raw.reasoning;
+  if (reasoning && typeof reasoning === "object" && typeof (reasoning as { effort?: unknown }).effort === "string") {
+    named.push(["reasoning.effort", (reasoning as { effort: string }).effort]);
+  }
+  if (raw.output_config !== undefined && raw.output_config !== null) {
+    if (typeof raw.output_config !== "object" || Array.isArray(raw.output_config)) {
+      throw invalidRequest("output_config must be an object");
+    }
+    const configured = (raw.output_config as { effort?: unknown }).effort;
+    if (configured !== undefined) named.push(["output_config.effort", configured]);
+  }
+  let selected: string | undefined;
+  for (const [label, value] of named) {
+    if (typeof value !== "string" || value.length < 1 || value.length > 128) {
+      throw invalidRequest(`${label} must be a non-empty string up to 128 characters`);
+    }
+    if (selected !== undefined && selected !== value) {
+      throw invalidRequest("effort values conflict");
+    }
+    selected = value;
+  }
+  return selected;
 }
 
 const EMBEDDED_EFFORT = /^(.*)-(low|medium|high|xhigh)(-fast)?$/;
