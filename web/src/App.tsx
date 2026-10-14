@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { addManagedAccount, getHealth, getManagedAccounts, probeManagedAccount, removeManagedAccount, runPrompt, setManagedDefaultProfile } from "./api";
+import { addManagedAccount, getDesktopSettings, getHealth, getManagedAccounts, probeManagedAccount, removeManagedAccount, runPrompt, saveDesktopSettings, setManagedDefaultProfile } from "./api";
 import { go, hrefFor, readRoute, type Route } from "./nav";
 import { RailNav } from "./RailNav";
 import { AccountDetailPage } from "./pages/AccountDetailPage";
@@ -191,6 +191,15 @@ const COPY = {
       workspaceTitle: "Local files",
       workspaceBody:
         "Grok Build and Claude Code edit files with their own local tools in your project directory. This gateway only runs the model. Cursor SDK uses an empty workspace, so the model may emit that absolute path. Use a relative path or your project path.",
+      settingsTitle: "This computer",
+      listenPort: "Listen port",
+      gatewayKey: "Gateway key",
+      save: "Save and restart",
+      saving: "Saving",
+      reveal: "Show",
+      hide: "Hide",
+      restarting: "Restarting",
+      restartBody: "The gateway is restarting on the new port. This window will follow it.",
     },
     keyNeeded: "Paste a Cursor API key first.",
   },
@@ -365,6 +374,15 @@ const COPY = {
       workspaceTitle: "本地文件",
       workspaceBody:
         "Grok Build / Claude Code 改文件用的是它们自己的本机工具，工作区是你的项目目录。这个网关只提供模型推理。Cursor SDK 的 cwd 是空目录，所以模型有时会吐出网关绝对路径。写相对路径或你的项目路径就能改本地文件。",
+      settingsTitle: "本机",
+      listenPort: "监听端口",
+      gatewayKey: "Gateway key",
+      save: "保存并重启",
+      saving: "保存中",
+      reveal: "显示",
+      hide: "隐藏",
+      restarting: "正在重启",
+      restartBody: "网关正在用新端口重启，这个窗口会跟过去。",
     },
     keyNeeded: "先粘贴一把 Cursor Key。",
   },
@@ -395,6 +413,13 @@ export function App() {
   const [runState, setRunState] = useState<LoadState>("idle");
   const [recipe, setRecipe] = useState<RecipeName>("claude");
   const [copied, setCopied] = useState("");
+  const [desktopReady, setDesktopReady] = useState(false);
+  const [desktopPort, setDesktopPort] = useState("");
+  const [desktopKey, setDesktopKey] = useState("");
+  const [desktopRevealed, setDesktopRevealed] = useState(false);
+  const [desktopSaving, setDesktopSaving] = useState(false);
+  const [desktopRestarting, setDesktopRestarting] = useState(false);
+  const [desktopError, setDesktopError] = useState("");
   const t = COPY[language];
   const origin = window.location.origin;
   const active = roster.find((item) => item.id === activeId);
@@ -422,6 +447,30 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    void getDesktopSettings().then((settings) => {
+      if (!settings) return;
+      setDesktopPort(String(settings.port));
+      setDesktopKey(settings.gateway_access_key);
+      setDesktopReady(true);
+    }).catch((error: unknown) => {
+      setDesktopError(messageOf(error));
+    });
+  }, []);
+
+  const saveDesktop = async () => {
+    setDesktopSaving(true);
+    setDesktopError("");
+    try {
+      await saveDesktopSettings(Number(desktopPort), desktopKey);
+      setDesktopRestarting(true);
+    } catch (error: unknown) {
+      setDesktopError(messageOf(error));
+    } finally {
+      setDesktopSaving(false);
+    }
+  };
+
+  useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     document.title = `${t.product} · ${pageLabelFor(route.page, t)}`;
   }, [language, route.page, t]);
@@ -438,11 +487,12 @@ export function App() {
     return supported.join(" + ");
   }, [health]);
 
+  const clientKey = desktopReady && desktopKey ? desktopKey : "<gateway-key>";
   const snippets: Record<RecipeName, string> = {
-    claude: `ANTHROPIC_BASE_URL=${origin}\nANTHROPIC_AUTH_TOKEN=<gateway-key>\nANTHROPIC_MODEL=claude-sonnet-4-6\nclaude`,
-    grok: `[models]\ndefault = "cursor-gw"\n\n[model.cursor-gw]\nname = "cursor-sdk2api"\nbase_url = "${origin}/v1"\napi_key = "<gateway-key>"\nmodel = "grok-4.6"\napi_backend = "responses"\n\n# Isolated: GROK_HOME=/path/to/grok_home grok --model cursor-gw`,
-    openai: `from openai import OpenAI\nclient = OpenAI(base_url="${origin}/v1", api_key="<gateway-key>")`,
-    newapi: `Base URL: ${origin}\nAPI key: <gateway-key>\nAnthropic upstream: ${origin}\nOpenAI upstream: ${origin}/v1`,
+    claude: `ANTHROPIC_BASE_URL=${origin}\nANTHROPIC_AUTH_TOKEN=${clientKey}\nANTHROPIC_MODEL=claude-sonnet-4-6\nclaude`,
+    grok: `[models]\ndefault = "cursor-gw"\n\n[model.cursor-gw]\nname = "cursor-sdk2api"\nbase_url = "${origin}/v1"\napi_key = "${clientKey}"\nmodel = "grok-4.6"\napi_backend = "responses"\n\n# Isolated: GROK_HOME=/path/to/grok_home grok --model cursor-gw`,
+    openai: `from openai import OpenAI\nclient = OpenAI(base_url="${origin}/v1", api_key="${clientKey}")`,
+    newapi: `Base URL: ${origin}\nAPI key: ${clientKey}\nAnthropic upstream: ${origin}\nOpenAI upstream: ${origin}/v1`,
   };
   const clientRoutes = language === "zh"
     ? [
@@ -725,7 +775,28 @@ export function App() {
           />
         ) : null}
         {route.page === "connect" ? (
-          <ConnectPage t={t.connect} origin={origin} copied={copied} recipe={recipe} snippets={snippets} routes={clientRoutes} onCopy={copyValue} onRecipe={setRecipe} />
+          <ConnectPage
+            t={t.connect}
+            origin={origin}
+            copied={copied}
+            recipe={recipe}
+            snippets={snippets}
+            routes={clientRoutes}
+            onCopy={copyValue}
+            onRecipe={setRecipe}
+            desktop={desktopReady ? {
+              port: desktopPort,
+              accessKey: desktopKey,
+              revealed: desktopRevealed,
+              saving: desktopSaving,
+              restarting: desktopRestarting,
+              error: desktopError,
+              onPort: setDesktopPort,
+              onKey: setDesktopKey,
+              onReveal: () => setDesktopRevealed((value) => !value),
+              onSave: () => void saveDesktop(),
+            } : null}
+          />
         ) : null}
       </main>
       <footer className="foot">

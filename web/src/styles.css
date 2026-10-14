@@ -921,6 +921,16 @@ html[lang="zh-CN"] .page-head h1 { letter-spacing: 0; }
 }
 .note { padding: 8px 14px 10px; font-size: 12px; color: var(--mute); line-height: 1.45; }
 .field-error { padding: 0 14px 8px; color: #c4412f; font-size: 12px; }
+.desktop-settings { display: grid; gap: 8px; max-width: 520px; padding: 8px 0 12px; }
+.desktop-field { display: grid; gap: 4px; font-size: 12px; color: var(--mute); }
+.desktop-field input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--hair);
+  color: var(--ink);
+  background: var(--paper);
+}
+.desktop-actions { display: flex; gap: 8px; }
 .wait {
   margin: 0 14px 10px;
   padding: 8px 10px;

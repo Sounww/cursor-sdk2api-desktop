@@ -10,3 +10,4 @@ tmp/
 _temp/
 .cursor-sdk2api/
 *.tsbuildinfo
+release/

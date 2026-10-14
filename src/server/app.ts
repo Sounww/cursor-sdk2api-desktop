@@ -53,6 +53,7 @@ import {
 import { parseResponsesRequest } from "../protocols/openai-responses/parse.js";
 import { writeResponsesStreamError } from "../protocols/openai-responses/sse.js";
 import { createResponsesWriterFactory } from "../protocols/openai-responses/writer.js";
+import { saveDesktopSettings, type DesktopSettings } from "../desktop/settings.js";
 import type { SdkRuntime } from "../sdk/port.js";
 import { ModelCatalog } from "../sdk/catalog.js";
 import { headerValue, readJsonBody, requestPath, sendError, sendJson, sendOpenAIError } from "./http-util.js";
@@ -144,6 +145,7 @@ export function createApp(input: {
   fetchSandQuota?: typeof fetchCursorSandQuota;
   sandHealth?: SandLoaderHealth;
   assertSandAccess?: (apiKey: string) => Promise<void>;
+  onDesktopRestart?: () => void;
 }): App {
   const { config, sdk, clock, logger, workspaceDir, beforeApplyBoundary } = input;
   const fetchSandQuota = input.fetchSandQuota ?? fetchCursorSandQuota;
@@ -252,6 +254,7 @@ export function createApp(input: {
       }
     }
 
+    registry.sweep();
     candidates = candidates.filter(
       (account) =>
         !excludedFingerprints.has(managedAccountAuth(account.apiKey).fingerprint) &&
@@ -432,6 +435,51 @@ export function createApp(input: {
           },
           requestId,
         );
+        return;
+      }
+
+      if (config.desktopMode && path === "/v0/management/desktop" && method === "GET") {
+        sendJson(
+          res,
+          200,
+          {
+            desktop: true,
+            host: config.host,
+            port: config.port,
+            gateway_access_key: config.gatewayAccessKey,
+          },
+          requestId,
+        );
+        return;
+      }
+
+      if (config.desktopMode && path === "/v0/management/desktop" && method === "PUT") {
+        if (!config.desktopSettingsPath || !config.gatewayAccessKey) {
+          throw invalidRequest("Desktop settings are not configured");
+        }
+        const body = await readJsonBody(req, config.maxBodyBytes) as {
+          port?: unknown;
+          gateway_access_key?: unknown;
+        } | undefined;
+        const cursorKeys = [
+          ...accounts.list().map((account) => account.apiKey),
+          ...(config.managedCursorKey ? [config.managedCursorKey] : []),
+        ];
+        let saved: DesktopSettings;
+        try {
+          saved = saveDesktopSettings(
+            config.desktopSettingsPath,
+            {
+              port: body?.port,
+              gatewayAccessKey: body?.gateway_access_key,
+            },
+            cursorKeys,
+          );
+        } catch (error) {
+          throw invalidRequest(error instanceof Error ? error.message : "Desktop settings are invalid");
+        }
+        sendJson(res, 200, { restart_required: true, port: saved.port }, requestId);
+        if (input.onDesktopRestart) setImmediate(input.onDesktopRestart);
         return;
       }
 

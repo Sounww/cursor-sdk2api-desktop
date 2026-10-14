@@ -12,12 +12,17 @@ const logger = createLogger(config.logLevel);
 const proxy = configureSdkOutboundProxy();
 const sdk = createCursorRuntime({ stateDir: config.stateDir });
 const workspaceDir = ensureEmptyWorkspace(config.instanceId, config.emptyWorkspaceDir);
+let stopping = false;
+
 const app = createApp({
   config,
   sdk,
   clock: new SystemClock(),
   logger,
   workspaceDir,
+  onDesktopRestart() {
+    void shutdown("desktop-settings", 3_000);
+  },
 });
 
 const server = app.listen();
@@ -35,17 +40,19 @@ logger.info(
   "cursor-sdk2api listening",
 );
 
-const shutdown = async (signal: string) => {
+async function shutdown(signal: string, deadlineMs = config.runDeadlineMs): Promise<void> {
+  if (stopping) return;
+  stopping = true;
   logger.info({ signal }, "draining");
   app.beginShutdown();
-  await app.coordinator.drain(config.runDeadlineMs);
+  await app.coordinator.drain(deadlineMs);
   app.close();
   server.close(() => {
     logger.info({}, "shutdown complete");
     process.exit(0);
   });
-  setTimeout(() => process.exit(1), 10_000).unref();
-};
+  setTimeout(() => process.exit(1), Math.max(deadlineMs + 1_000, 4_000)).unref();
+}
 
 process.on("SIGTERM", () => {
   void shutdown("SIGTERM");

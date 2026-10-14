@@ -46,6 +46,8 @@ export interface GatewayConfig {
   capabilities: RuntimeCapabilities;
   runtimePolicy: RuntimePolicy;
   runtimeLedgerV2: boolean;
+  desktopMode: boolean;
+  desktopSettingsPath?: string;
 }
 
 export interface RuntimeCapabilities {
@@ -130,8 +132,8 @@ export function loadConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     instanceId: instanceId(process.env.INSTANCE_ID),
     version: process.env.GATEWAY_VERSION?.trim() || PACKAGE_VERSION,
     sdkVersion: "1.0.30",
-    globalActiveRuns: envInt("GLOBAL_ACTIVE_RUNS", 4),
-    perCredentialActiveRuns: envInt("PER_CREDENTIAL_ACTIVE_RUNS", 2),
+    globalActiveRuns: envInt("GLOBAL_ACTIVE_RUNS", 8),
+    perCredentialActiveRuns: envInt("PER_CREDENTIAL_ACTIVE_RUNS", 8),
     maxAwaitingSessions: envInt("MAX_AWAITING_SESSIONS", 32),
     sessionTtlMs,
     replayTtlMs: envInt("REPLAY_TTL_MS", 10 * 60_000),
@@ -155,6 +157,8 @@ export function loadConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     capabilities: { ...DEFAULT_CAPABILITIES },
     runtimePolicy: loadRuntimePolicyFromEnv(),
     runtimeLedgerV2: parseRuntimeLedgerV2(),
+    desktopMode: envBool("DESKTOP_MODE", false),
+    desktopSettingsPath: process.env.DESKTOP_SETTINGS_PATH?.trim() || undefined,
   };
 
   if (authMode === "managed") {
@@ -167,7 +171,7 @@ export function loadConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
   }
 
   const merged = { ...config, ...overrides };
-  return {
+  const resolved: GatewayConfig = {
     ...merged,
     capabilities: {
       ...config.capabilities,
@@ -175,4 +179,24 @@ export function loadConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
       ...overrides.capabilities,
     },
   };
+  assertDesktopConfig(resolved);
+  return resolved;
+}
+
+function isLoopbackHost(host: string): boolean {
+  const value = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return value === "127.0.0.1" || value === "::1" || value === "localhost";
+}
+
+function assertDesktopConfig(config: GatewayConfig): void {
+  if (!config.desktopMode) return;
+  if (!isLoopbackHost(config.host)) {
+    throw new Error("DESKTOP_MODE requires a loopback HOST");
+  }
+  if (!config.desktopSettingsPath) {
+    throw new Error("DESKTOP_MODE requires DESKTOP_SETTINGS_PATH");
+  }
+  if (config.authMode !== "managed" || !config.gatewayAccessKey) {
+    throw new Error("DESKTOP_MODE requires AUTH_MODE=managed and GATEWAY_ACCESS_KEY");
+  }
 }

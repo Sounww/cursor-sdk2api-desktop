@@ -20,6 +20,14 @@ roster keeps only account ids and masked hints. The supplied compose files bind
 the console to `127.0.0.1`. An Internet-facing reverse proxy must authenticate
 and restrict `/console/` and `/v0/management/*`.
 
+## Desktop (Windows)
+
+`npm run desktop:dev` builds the gateway and opens a local Electron window. `npm run desktop:pack` checks that Electron's Node is at least 22.19, then builds an NSIS installer under `release/`. Neither script runs in CI.
+
+The window is a single-user console bound to `127.0.0.1`. The listen port and gateway access key are stored in `%APPDATA%/cursor-sdk2api/desktop-settings.json`; account state is `%APPDATA%/cursor-sdk2api/state`. Saving either value from Quick start restarts the gateway. Docker and `node dist/index.js` ignore that file and keep using `PORT`, `HOST`, `AUTH_MODE`, and `GATEWAY_ACCESS_KEY`.
+
+The pack step leaves the app unpacked (`asar: false`) and does not rebuild native modules. `@cursor/sdk` keeps its prebuilt `@cursor/sdk-win32-x64` package, and the gateway process is Electron's Node via `ELECTRON_RUN_AS_NODE`.
+
 ## Docker
 
 ```bash
@@ -115,4 +123,4 @@ Completed follow-up after restart requires the same `STATE_DIR` volume, `x-curso
 
 ## Resource defaults
 
-Development defaults: 4 global active runs, 2 per credential, 30 minute awaiting TTL, 10 minute replay TTL, 60 minute run deadline, and 40 seconds to the first SDK event.
+Development defaults: 8 global active runs, 8 per credential, 30 minute awaiting TTL, 10 minute replay TTL, 60 minute run deadline, and 40 seconds to the first SDK event. A run whose client has already disconnected does not keep occupying one of those slots.

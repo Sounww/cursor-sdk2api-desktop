@@ -30,6 +30,7 @@ export async function startTestApp(
     fetchSandQuota?: (apiKey: string) => Promise<CursorSandResult>;
     sandHealth?: import("../../src/sdk/sand-loader.js").SandLoaderHealth;
     assertSandAccess?: (apiKey: string) => Promise<void>;
+    onDesktopRestart?: () => void;
   } = {},
 ): Promise<TestContext> {
   const clock = options.clock ?? new SystemClock();
@@ -70,6 +71,7 @@ export async function startTestApp(
       patch_contract_version: "1.0.30",
     },
     assertSandAccess: options.assertSandAccess,
+    onDesktopRestart: options.onDesktopRestart,
   });
   const server = createServer((req, res) => {
     void app.handler(req, res);

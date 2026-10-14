@@ -38,7 +38,9 @@
     "live:smoke": "tsx tests/live-smoke/run.ts",
     "live:ordinary": "tsx tests/live-smoke/ordinary-turn-live.ts",
     "new-api:smoke": "node integrations/new-api/smoke.mjs",
-    "secret:scan": "bash tests/secret-scan.sh"
+    "secret:scan": "bash tests/secret-scan.sh",
+    "desktop:dev": "npm run build && electron desktop/main.cjs",
+    "desktop:pack": "node scripts/check-electron-node.mjs && npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "@cursor/sdk": "1.0.30",
@@ -54,6 +56,34 @@
     "tsx": "4.20.6",
     "typescript": "5.9.2",
     "vite": "8.1.0",
-    "vitest": "3.2.6"
+    "vitest": "3.2.6",
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "dev.cursor-sdk2api.desktop",
+    "productName": "cursor-sdk2api",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/main.cjs",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.cjs"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

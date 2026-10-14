@@ -14,6 +14,8 @@ The API Compatibility Profile does not grant Cursor ambient filesystem or shell 
 
 `/console/` is a static UI served by the same process as the API. Its v0.1 account-management endpoint has no separate access key. A raw Cursor key is sent only once when an operator imports it; list, probe, and playground responses return an account id and masked hint, never the stored key. Account JSON files remain plaintext secrets protected by `0700`/`0600` filesystem permissions. The management API can add/remove pool credentials and run a probe, so the supplied compose files bind the console to `127.0.0.1` only. Prefer an encrypted state volume. An Internet-facing reverse proxy must authenticate and restrict `/console/` and `/v0/management/*`. If `CONSOLE_DIR` is overridden, keep it pointed at a dedicated, trusted build tree.
 
+The desktop build (`DESKTOP_MODE=1`) is a single-user loopback app and refuses any non-loopback `HOST`. Its listen port and gateway access key live in the user config directory as `desktop-settings.json`, written with the same owner-only mode as account files. `GET` and `PUT /v0/management/desktop` exist only in that mode, so server and Docker deployments leave them unregistered. That settings file is a secret: it is not written to logs, health, or lineage. Saving it restarts the process after a short drain; it does not hot-swap a live listener.
+
 ## Logging
 
 Default structured logs may include request id, model id, stream flag, status, pending count, and final numeric usage. They must not include API keys, cookies, prompts, thinking, tool schemas, tool arguments, or tool results.

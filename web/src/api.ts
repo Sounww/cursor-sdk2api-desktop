@@ -7,8 +7,35 @@ export interface ManagementAccount {
   default_profile?: "sdk" | "sand";
 }
 
+export interface DesktopSettingsPayload {
+  desktop: true;
+  host: string;
+  port: number;
+  gateway_access_key: string;
+}
+
 export async function getHealth(): Promise<HealthPayload> {
   return getJson<HealthPayload>("/health");
+}
+
+export async function getDesktopSettings(): Promise<DesktopSettingsPayload | null> {
+  const response = await fetch("/v0/management/desktop");
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return (await response.json()) as DesktopSettingsPayload;
+}
+
+export async function saveDesktopSettings(
+  port: number,
+  gatewayAccessKey: string,
+): Promise<{ restart_required: true; port: number }> {
+  const response = await fetch("/v0/management/desktop", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ port, gateway_access_key: gatewayAccessKey }),
+  });
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return (await response.json()) as { restart_required: true; port: number };
 }
 
 export async function getModels(apiKey: string): Promise<ModelsPayload> {
