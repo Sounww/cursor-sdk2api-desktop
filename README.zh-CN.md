@@ -36,6 +36,7 @@
 - **运行方式：** 默认 `sdk`。显式 `sand` 使用 hash 守卫的 Cursor Sand 客户端、隔离 store/workspace，并要求 Grok Bot 授权；不会静默互退。
 - **耐久 Run：** 可选 SQLite 账本（`RUNTIME_LEDGER_V2=1`）保证同一逻辑请求只 Send 一次，断线后继续观察到终态并写出一条 receipt。
 - **Responses Compact：** `POST /v1/responses/compact` 返回唯一网关本地 `csgw1.` compaction item，不第二次 Cursor Send。
+- **Windows 桌面版：** 仅监听本机回环的 Electron 应用，监听端口和网关 Key 在控制台里设置。
 
 > Cursor 通路里的 Grok 不提供 xAI 原生 `x_search`。客户端自己的网页和网络搜索仍可作为普通 function tool 使用。
 
@@ -63,6 +64,15 @@ Docker：
 ```bash
 docker compose up --build
 ```
+
+Windows 桌面版：
+
+```bash
+npm run desktop:dev    # 或 start.bat：构建后打开 Electron 控制台
+npm run desktop:pack   # 或 build.bat：在 release/ 下生成 NSIS 安装包
+```
+
+桌面版只绑定 `127.0.0.1`，端口、网关 Key、账号和日志都保存在 `%APPDATA%/cursor-sdk2api` 下。详见[部署](docs/DEPLOYMENT.md#desktop-windows)。
 
 Cursor 需要代理时，设置 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`。网关会把两条 SDK 数据通路一起接管。SOCKS 和 PAC 会 fail closed。
 
@@ -114,11 +124,14 @@ env_key = "GATEWAY_ACCESS_KEY"
 
 ## 运维
 
-- `/console/`：本地运维控制台
+- `/console/`：本地运维控制台，包含首页、快速开始、账号、模型、配额、日志和协议试跑页面
 - `/v1/models`：Cursor 实时模型目录
 - `/v1/account`：managed 模式下所有 Cursor 账号身份与当前 Dashboard 用量
 - `/health`：能力、SDK 版本、默认/sdk/sand 就绪状态和代理传输状态
 - `STATE_DIR`：账号、SDK store 和 resume 状态
+- `LOG_DIR`：按天写入、仅 Owner 可读的 `gateway-YYYY-MM-DD.log`，默认 `$STATE_DIR/logs`，保留 `LOG_RETENTION_DAYS`（14）天。`LOG_FILE=0` 关闭。控制台日志页读取的就是这些文件。
+
+Agent 文件搜索使用 `@cursor/sdk-<platform>-<arch>` 自带的 `rg`。缺少这个包时网关会拒绝启动，请用 `npm ci` 安装依赖。
 
 Managed 模式沿用 CPA 的客户端 Key 与上游凭据分离方式：客户端只拿到 `GATEWAY_ACCESS_KEY`，导入的 Cursor Key 留在网关账号池。新会话按模型 round-robin；正常续轮固定原账号，尚未产生语义输出时允许一次备用账号重试。原账号或 SDK 会话丢失时，只要 transcript 完整且自洽，网关可安全冷恢复。BYOK 仅作为可信单用户 sidecar 的兼容模式保留。
 
@@ -126,7 +139,7 @@ Managed 模式沿用 CPA 的客户端 Key 与上游凭据分离方式：客户�
 
 ## 验证
 
-确定性测试共 189 项。最新脱敏回执证明 Sonnet 4.6 与 Grok 4.6 xhigh 的持久化恢复和完整 transcript 冷恢复：[恢复 live smoke](docs/evidence/2026-08-19-beefapi-sync-live-smoke.md)。较早的四模型回执还覆盖 Fable 5 与 Composer 2.5：[四模型回执](docs/evidence/2026-08-15-live-smoke.md)。
+确定性测试共 352 项。最新脱敏回执证明 Sonnet 4.6 与 Grok 4.6 xhigh 的持久化恢复和完整 transcript 冷恢复：[恢复 live smoke](docs/evidence/2026-08-19-beefapi-sync-live-smoke.md)。较早的四模型回执还覆盖 Fable 5 与 Composer 2.5：[四模型回执](docs/evidence/2026-08-15-live-smoke.md)。
 
 ```bash
 npm run typecheck

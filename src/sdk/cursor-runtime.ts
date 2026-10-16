@@ -24,6 +24,7 @@ import { DEFAULT_RUNTIME_PROFILE, type RuntimeProfile } from "../core/runtime-pr
 import { credentialFingerprint } from "../digest.js";
 import { fetchCursorDashboardQuota } from "../account/cursor-dashboard.js";
 import { cursorModelSelection } from "./model-selection.js";
+import { configureBundledRipgrep } from "./ripgrep.js";
 import { ensureSandSdkClone } from "./sand-loader.js";
 import { sandStoreDir, sandWorkspaceDir } from "./sand-paths.js";
 
@@ -241,6 +242,7 @@ async function sandAgentBindings(stateDir: string): Promise<CursorAgentApi> {
 }
 
 export function createCursorRuntime(options: { stateDir: string }): SdkRuntime {
+  configureBundledRipgrep();
   const sdkStoreRoot = join(options.stateDir, "sdk-store");
   ensurePrivateDir(sdkStoreRoot);
   const tenantResources = (apiKey: string, workspaceRoot: string, profile?: RuntimeProfile) => {
@@ -266,6 +268,10 @@ export function createCursorRuntime(options: { stateDir: string }): SdkRuntime {
     const local = {
       cwd: resources.workspaceDir,
       settingSources: [],
+      // The empty gateway workspace has no sandbox root. Leaving the SDK
+      // sandbox on makes ripgrep spawn with a directory that was never created,
+      // which Node reports as a missing rg.exe.
+      sandboxOptions: { enabled: false },
       customTools: customTools as never,
       store: resources.store,
     };

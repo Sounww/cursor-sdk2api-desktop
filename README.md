@@ -35,6 +35,7 @@
 - **Runtime profiles:** default `sdk`. Explicit `sand` uses a hash-guarded Cursor Sand client, isolated store/workspace, and Grok Bot grant. No silent fallback.
 - **Durable runs:** optional SQLite ledger (`RUNTIME_LEDGER_V2=1`) claims one logical request, keeps observing after disconnect, and finalizes one receipt.
 - **Responses compact:** `POST /v1/responses/compact` returns one gateway-local `csgw1.` compaction item without a second Cursor Send.
+- **Windows desktop app:** a loopback Electron build whose listen port and gateway key are set from the console.
 
 > Cursor-routed Grok does not provide xAI-native `x_search`. Client-owned web and network tools still work as normal function tools.
 
@@ -62,6 +63,15 @@ Docker:
 ```bash
 docker compose up --build
 ```
+
+Windows desktop app:
+
+```bash
+npm run desktop:dev    # or start.bat: build, then open the Electron console
+npm run desktop:pack   # or build.bat: NSIS installer under release/
+```
+
+The desktop app binds to `127.0.0.1` and keeps its port, gateway key, accounts, and logs under `%APPDATA%/cursor-sdk2api`. See [Deployment](docs/DEPLOYMENT.md#desktop-windows).
 
 If Cursor needs a proxy, set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`. The gateway applies them to both SDK data planes. SOCKS and PAC URLs fail closed.
 
@@ -117,11 +127,14 @@ Client tools are converted to SDK `local.customTools` through MCP. The model cho
 
 ## Operations
 
-- `/console/`: local operator console
+- `/console/`: local operator console with Home, Quick start, Accounts, Models, Quota, Logs, and Playground pages
 - `/v1/models`: live Cursor model catalog
 - `/v1/account`: pooled Cursor identities and current Dashboard usage in managed mode
 - `/health`: capabilities, SDK version, default/sdk/sand profile readiness, and proxy transport mode
 - `STATE_DIR`: account, SDK store, and resume state
+- `LOG_DIR`: daily owner-only `gateway-YYYY-MM-DD.log` files, default `$STATE_DIR/logs`, kept for `LOG_RETENTION_DAYS` (14). `LOG_FILE=0` turns them off. The console Logs page reads the same files.
+
+Agent file search uses the `rg` binary shipped in `@cursor/sdk-<platform>-<arch>`. The gateway refuses to start when that package is missing, so install with `npm ci`.
 
 Managed mode follows CPA's split between client keys and upstream credentials: clients receive only `GATEWAY_ACCESS_KEY`; imported Cursor keys stay in the gateway account store. New sessions use model-aware round-robin. Continuations stay pinned when the original account is healthy; before semantic output, one alternate managed account may be tried. If the original account/session is gone, an exact full transcript can cold-branch safely. BYOK remains available for a trusted single-user sidecar.
 
@@ -129,7 +142,7 @@ Managed mode follows CPA's split between client keys and upstream credentials: c
 
 ## Verification
 
-The deterministic suite contains 189 tests. The latest redacted receipt proves persisted and full-transcript recovery on Sonnet 4.6 and Grok 4.6 xhigh: [recovery live smoke](docs/evidence/2026-08-19-beefapi-sync-live-smoke.md). The earlier four-model receipt also covers Fable 5 and Composer 2.5: [four-model evidence](docs/evidence/2026-08-15-live-smoke.md).
+The deterministic suite contains 352 tests. The latest redacted receipt proves persisted and full-transcript recovery on Sonnet 4.6 and Grok 4.6 xhigh: [recovery live smoke](docs/evidence/2026-08-19-beefapi-sync-live-smoke.md). The earlier four-model receipt also covers Fable 5 and Composer 2.5: [four-model evidence](docs/evidence/2026-08-15-live-smoke.md).
 
 ```bash
 npm run typecheck

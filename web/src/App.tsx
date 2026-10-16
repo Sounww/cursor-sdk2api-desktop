@@ -51,8 +51,6 @@ const COPY = {
     language: "中文",
     dark: "Dark",
     light: "Light",
-    source: "Source",
-    security: "Security",
     home: {
       kicker: "Runtime overview",
       title: "Overview",
@@ -269,8 +267,6 @@ const COPY = {
     language: "EN",
     dark: "深色",
     light: "浅色",
-    source: "源码",
-    security: "安全",
     home: {
       kicker: "运行总览",
       title: "概览",
@@ -801,10 +797,6 @@ export function App() {
           {pageLabel}
           {copied ? <span className="copy-toast" role="status">{t.home.copied}</span> : null}
         </p>
-        <nav className="links">
-          <a href="https://github.com/Sunnyender-org/cursor-sdk2api" target="_blank" rel="noreferrer">{t.source}</a>
-          <a href="https://github.com/Sunnyender-org/cursor-sdk2api/blob/main/docs/SECURITY.md" target="_blank" rel="noreferrer">{t.security}</a>
-        </nav>
       </header>
       <main id="main-content">
         {route.page === "home" ? (

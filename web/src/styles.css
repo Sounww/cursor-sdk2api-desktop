@@ -1150,7 +1150,6 @@ textarea {
   color: var(--mute);
   font-size: 12px;
 }
-.links { display: flex; gap: 16px; }
 .foot a { text-decoration: none; color: var(--ink); }
 .foot-origin { overflow-wrap: anywhere; }
 
