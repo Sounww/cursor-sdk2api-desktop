@@ -20,6 +20,8 @@ The desktop build (`DESKTOP_MODE=1`) is a single-user loopback app and refuses a
 
 Default structured logs may include request id, model id, stream flag, status, pending count, and final numeric usage. They must not include API keys, cookies, prompts, thinking, tool schemas, tool arguments, or tool results.
 
+The same lines are appended to daily files under `LOG_DIR` (default `$STATE_DIR/logs`, directory `0700`, files `0600`). Third-party `console.warn` / `console.error` output and uncaught exceptions are copied there only after `redactSecrets` and truncation. `GET /v0/management/logs` sanitizes each line again before returning it. Like the rest of `/v0/management/*`, it has no separate key and must stay on loopback or behind an authenticated proxy.
+
 Proxy URLs can contain credentials and are therefore secrets. They remain in
 the process environment only, are never copied into runtime config or health,
 and URL userinfo is redacted if an upstream error includes it. Do not enable

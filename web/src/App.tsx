@@ -7,6 +7,7 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { ConnectPage } from "./pages/ConnectPage";
 import type { RecipeName } from "./recipes";
 import { HomePage, type HomeCopy } from "./pages/HomePage";
+import { LogsPage } from "./pages/LogsPage";
 import { ModelsPage } from "./pages/ModelsPage";
 import { PlaygroundPage } from "./pages/PlaygroundPage";
 import { QuotaPage } from "./pages/QuotaPage";
@@ -32,12 +33,14 @@ const COPY = {
     navAccounts: "Accounts",
     navModels: "Models",
     navQuota: "Quota",
+    navLogs: "Logs",
     navPlay: "Playground",
     navHomeMeta: "Runtime and API URLs",
     navStartMeta: "Client recipes",
     navAccountsMeta: "Persistent credentials",
     navModelsMeta: "Catalog from imported accounts",
     navQuotaMeta: "Cursor dashboard usage",
+    navLogsMeta: "Gateway log files by day",
     navPlayMeta: "Messages / Chat / Responses",
     consoleTag: "Local console",
     ready: "Ready",
@@ -216,6 +219,25 @@ const COPY = {
       copied: "Copied",
       goAccounts: "Go to accounts",
     },
+    logs: {
+      title: "Logs",
+      refresh: "Refresh",
+      refreshing: "Refreshing",
+      follow: "Auto refresh",
+      date: "Day",
+      today: "Today",
+      level: "Level",
+      all: "All",
+      filter: "Filter",
+      filterPlaceholder: "Text in message or fields",
+      copyDir: "Copy log folder",
+      copied: "Copied",
+      dir: "Log folder",
+      empty: "No log lines for this day yet.",
+      noMatch: "No lines match the filter.",
+      disabled: "File logging is off (LOG_FILE=0).",
+      lines: "lines",
+    },
     keyNeeded: "Paste a Cursor API key first.",
   },
   zh: {
@@ -229,12 +251,14 @@ const COPY = {
     navAccounts: "账号",
     navModels: "模型",
     navQuota: "配额",
+    navLogs: "日志",
     navPlay: "协议试跑",
     navHomeMeta: "运行控制和 API 地址",
     navStartMeta: "客户端配方",
     navAccountsMeta: "持久化凭证",
     navModelsMeta: "已导入账号的模型目录",
     navQuotaMeta: "官方限额",
+    navLogsMeta: "按天保存的网关日志",
     navPlayMeta: "Messages / Chat / Responses",
     consoleTag: "本机控制台",
     ready: "就绪",
@@ -412,6 +436,25 @@ const COPY = {
       copy: "复制 id",
       copied: "已复制",
       goAccounts: "去账号页",
+    },
+    logs: {
+      title: "日志",
+      refresh: "刷新",
+      refreshing: "刷新中",
+      follow: "自动刷新",
+      date: "日期",
+      today: "今天",
+      level: "级别",
+      all: "全部",
+      filter: "筛选",
+      filterPlaceholder: "按消息或字段里的文字筛选",
+      copyDir: "复制日志目录",
+      copied: "已复制",
+      dir: "日志目录",
+      empty: "这一天还没有日志。",
+      noMatch: "没有符合筛选条件的日志。",
+      disabled: "文件日志已关闭（LOG_FILE=0）。",
+      lines: "行",
     },
     keyNeeded: "先粘贴一把 Cursor Key。",
   },
@@ -721,12 +764,14 @@ export function App() {
           gatewayLabel={t.groupGateway}
           home={t.navHome}
           quota={t.navQuota}
+          logs={t.navLogs}
           accounts={t.navAccounts}
           models={t.navModels}
           connect={t.navStart}
           playground={t.navPlay}
           homeMeta={t.navHomeMeta}
           quotaMeta={t.navQuotaMeta}
+          logsMeta={t.navLogsMeta}
           accountsMeta={t.navAccountsMeta}
           modelsMeta={t.navModelsMeta}
           startMeta={t.navStartMeta}
@@ -735,6 +780,7 @@ export function App() {
           icons={{
             home: <NavIcon name="home" />,
             quota: <NavIcon name="quota" />,
+            logs: <NavIcon name="logs" />,
             key: <NavIcon name="key" />,
             models: <NavIcon name="models" />,
             start: <NavIcon name="start" />,
@@ -818,6 +864,9 @@ export function App() {
             onCopy={copyValue}
           />
         ) : null}
+        {route.page === "logs" ? (
+          <LogsPage t={t.logs} copied={copied} onCopy={copyValue} />
+        ) : null}
         {route.page === "playground" ? (
           <PlaygroundPage
             t={t.play}
@@ -876,6 +925,7 @@ function pageLabelFor(page: Route["page"], t: (typeof COPY)["en"] | (typeof COPY
   if (page === "accounts" || page === "account") return t.navAccounts;
   if (page === "quota") return t.navQuota;
   if (page === "models") return t.navModels;
+  if (page === "logs") return t.navLogs;
   if (page === "playground") return t.navPlay;
   return t.navHome;
 }
@@ -884,7 +934,7 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : "Request failed";
 }
 
-function NavIcon({ name }: { name: "home" | "quota" | "key" | "models" | "start" | "play" }) {
+function NavIcon({ name }: { name: "home" | "quota" | "logs" | "key" | "models" | "start" | "play" }) {
   const d =
     name === "home"
       ? "M3 10.5 12 3l9 7.5V21H14V14H10v7H3Z"
@@ -894,9 +944,11 @@ function NavIcon({ name }: { name: "home" | "quota" | "key" | "models" | "start"
           ? "M8 14a5 5 0 1 1 4.9-6H21v3h-2v3h-3v2h-3.1A5 5 0 0 1 8 14Zm0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"
           : name === "models"
             ? "M4 5h16v3H4Zm0 5.5h16v3H4Zm0 5.5h10v3H4Z"
-            : name === "start"
-              ? "M8 5v14l11-7Z"
-              : "M4 5h10v4H8v6h6v4H4Zm12 3 5 4-5 4Z";
+            : name === "logs"
+              ? "M5 3h14v18H5Zm3 4v2h8V7Zm0 4v2h8v-2Zm0 4v2h5v-2Z"
+              : name === "start"
+                ? "M8 5v14l11-7Z"
+                : "M4 5h10v4H8v6h6v4H4Zm12 3 5 4-5 4Z";
   return (
     <svg className="nav-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
       <path fill="currentColor" d={d} />

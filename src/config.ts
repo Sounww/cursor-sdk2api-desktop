@@ -40,6 +40,9 @@ export interface GatewayConfig {
   stateDir: string;
   consoleDir: string;
   logLevel: string;
+  logFile: boolean;
+  logDir: string;
+  logRetentionDays: number;
   proxyConfigured: boolean;
   agentTransport: "http1-proxy" | "http2-direct";
   fetchTransport: "undici-proxy" | "fetch-direct";
@@ -151,6 +154,9 @@ export function loadConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     stateDir: process.env.STATE_DIR?.trim() || join(tmpdir(), "cursor-sdk2api", "state"),
     consoleDir: process.env.CONSOLE_DIR?.trim() || defaultConsoleDir,
     logLevel: process.env.LOG_LEVEL ?? "info",
+    logFile: envBool("LOG_FILE", true),
+    logDir: process.env.LOG_DIR?.trim() ?? "",
+    logRetentionDays: clamp(envInt("LOG_RETENTION_DAYS", 14), 1, 365),
     proxyConfigured,
     agentTransport: proxyConfigured ? "http1-proxy" : "http2-direct",
     fetchTransport: proxyConfigured ? "undici-proxy" : "fetch-direct",
@@ -173,6 +179,7 @@ export function loadConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
   const merged = { ...config, ...overrides };
   const resolved: GatewayConfig = {
     ...merged,
+    logDir: merged.logDir || join(merged.stateDir, "logs"),
     capabilities: {
       ...config.capabilities,
       ordinary_turn_coordinator: merged.ordinaryTurnCoordinator,

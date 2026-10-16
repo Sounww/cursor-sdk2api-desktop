@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { protocolEndpoint, runPrompt } from "../../web/src/api.js";
+import { getLogs, protocolEndpoint, runPrompt } from "../../web/src/api.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -74,4 +74,20 @@ test("operator console renders Responses SSE bytes incrementally", async () => {
   expect(snapshots.length).toBeGreaterThanOrEqual(2);
   expect(snapshots.at(-1)).toContain("response.created");
   expect(snapshots.at(-1)).toContain("response.completed");
+});
+
+test("operator console log reader passes the day and offset as query parameters", async () => {
+  const fetchMock = vi.fn(async () =>
+    new Response(JSON.stringify({ enabled: false, files: [], entries: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await getLogs();
+  await getLogs({ date: "2026-10-16", offset: 0 });
+
+  const paths = fetchMock.mock.calls.map((call) => (call as unknown as [string])[0]);
+  expect(paths).toEqual(["/v0/management/logs", "/v0/management/logs?date=2026-10-16&offset=0"]);
 });

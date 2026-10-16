@@ -17,7 +17,11 @@ npm run dev                # rebuild console, then node --import tsx src/index.t
 npm run dev:web            # vite console only (web/vite.config.ts)
 npm start                  # node dist/index.js, after build
 npm run secret:scan        # bash tests/secret-scan.sh
+npm run desktop:dev        # build, then run the loopback Electron app (desktop/main.cjs)
+npm run desktop:pack       # Windows NSIS installer via electron-builder
 ```
+
+`npm run lint` is an alias for `typecheck`; there is no separate linter. Untracked local files such as `key.txt`, `build.bat`, and `start.bat` may hold credentials, so never `git add -A` blindly.
 
 CI (`.github/workflows/ci.yml`, Node 22.19) runs `typecheck`, `test`, `build`, and `docker build`. Local contract tests do not prove live model behavior. Live credentials, deployment, npm/GHCR publication, and release need separate authorization.
 
@@ -68,6 +72,7 @@ Text and thinking stream through official `SendOptions.onDelta`. When onDelta is
 - `sdk-store/<fingerprint>` — official `JsonlLocalAgentStore`, plus a private empty workspace per credential
 - `lineage` — resume metadata only (session id, agent id, fingerprint, model parameters, policy and tool-catalog digests, pending tool ids). No prompts, tool payloads, or assistant bodies. Schema v2 quarantines older or incomplete records.
 - `auths` — managed-mode Cursor keys, owner-only files
+- `logs` — daily `gateway-YYYY-MM-DD.log` files (default `LOG_DIR`; desktop uses `%APPDATA%/cursor-sdk2api/logs`), read by the console Logs page via `GET /v0/management/logs`. `LOG_FILE=0` disables them.
 - optional SQLite `runtime.db` when `RUNTIME_LEDGER_V2=1` — claims one logical request, keeps observing after disconnect, and finalizes one receipt. Metadata and numeric usage only.
 
 Runtime profiles: default `sdk`. Explicit `sand` requires a Grok Bot grant, the hash-guarded 1.0.30 loader, and an isolated store/workspace. There is no SDK↔Sand fallback.

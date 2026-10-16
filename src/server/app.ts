@@ -38,6 +38,7 @@ import {
 } from "../errors.js";
 import { requestId as newRequestId } from "../ids.js";
 import type { Logger } from "../log.js";
+import { LOG_DATE_RE, type DailyLogFile } from "../log-file.js";
 import { parseMessagesRequest } from "../protocols/anthropic/parse.js";
 import type { ParsedMessages } from "../protocols/anthropic/types.js";
 import { estimateAnthropicInputTokens } from "../protocols/anthropic/count-tokens.js";
@@ -182,6 +183,27 @@ function managedPreSemanticFailureCanFailover(error: unknown): boolean {
   return error.httpStatus >= 500;
 }
 
+function readLogPage(logFile: DailyLogFile | undefined, req: IncomingMessage) {
+  const query = new URL(req.url ?? "/", "http://localhost").searchParams;
+  const rawDate = query.get("date")?.trim() ?? "";
+  const rawOffset = query.get("offset")?.trim() ?? "";
+  if (rawDate && !LOG_DATE_RE.test(rawDate)) throw invalidRequest("date is not a YYYY-MM-DD day");
+  if (rawOffset && !/^\d{1,15}$/.test(rawOffset)) throw invalidRequest("offset is not a non-negative integer");
+  if (!logFile) return { enabled: false, files: [], entries: [] };
+  const today = logFile.currentDate();
+  const date = rawDate || today;
+  const page = logFile.read(date, rawOffset ? Number(rawOffset) : undefined);
+  return {
+    enabled: true,
+    dir: logFile.dir,
+    today,
+    date,
+    files: logFile.list(),
+    entries: page.entries,
+    next_offset: page.next_offset,
+  };
+}
+
 function responseStarted(res: ServerResponse): boolean {
   return res.headersSent || res.writableEnded || res.destroyed;
 }
@@ -202,6 +224,7 @@ export function createApp(input: {
   sandHealth?: SandLoaderHealth;
   assertSandAccess?: (apiKey: string) => Promise<void>;
   onDesktopRestart?: () => void;
+  logFile?: DailyLogFile;
 }): App {
   const { config, sdk, clock, logger, workspaceDir, beforeApplyBoundary } = input;
   const fetchSandQuota = input.fetchSandQuota ?? fetchCursorSandQuota;
@@ -639,6 +662,11 @@ export function createApp(input: {
       if (path === "/v0/management/models" && method === "GET") {
         const listed = await listConsoleModels(accounts.list(), catalog);
         sendJson(res, 200, listed, requestId);
+        return;
+      }
+
+      if (path === "/v0/management/logs" && method === "GET") {
+        sendJson(res, 200, readLogPage(input.logFile, req), requestId);
         return;
       }
 

@@ -4,6 +4,7 @@ const { join } = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const HOST = "127.0.0.1";
+const STDERR_TAIL_CHARS = 3000;
 
 let child = null;
 let windowRef = null;
@@ -21,16 +22,17 @@ async function loadSettings() {
   return {
     file,
     stateDir: join(root, "state"),
+    logDir: join(root, "logs"),
     settings: settingsModule.loadOrCreateDesktopSettings(file),
   };
 }
 
 function spawnGateway(loaded) {
   const entry = join(appRoot(), "dist", "index.js");
-  return spawn(process.execPath, [entry], {
+  const proc = spawn(process.execPath, [entry], {
     cwd: appRoot(),
     windowsHide: true,
-    stdio: "inherit",
+    stdio: ["ignore", "inherit", "pipe"],
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
@@ -41,8 +43,26 @@ function spawnGateway(loaded) {
       AUTH_MODE: "managed",
       STATE_DIR: loaded.stateDir,
       DESKTOP_SETTINGS_PATH: loaded.file,
+      LOG_DIR: loaded.logDir,
     },
   });
+  // Keep the last stderr output so a crash before the gateway logger starts is still visible.
+  proc.stderrTail = "";
+  proc.stderr.setEncoding("utf8");
+  proc.stderr.on("data", (chunk) => {
+    proc.stderrTail = (proc.stderrTail + chunk).slice(-STDERR_TAIL_CHARS);
+    try {
+      process.stderr.write(chunk);
+    } catch {
+      // packaged GUI builds may have no stderr
+    }
+  });
+  return proc;
+}
+
+function failureDetail(summary, proc, logDir) {
+  const tail = proc.stderrTail.trim();
+  return [summary, tail, `Logs: ${logDir}`].filter(Boolean).join("\n\n");
 }
 
 function waitForHealth(port, token) {
@@ -102,14 +122,18 @@ async function boot() {
     if (quitting || mine !== generation) return;
     dialog.showErrorBox("cursor-sdk2api", error.message);
   });
-  proc.on("exit", (code) => {
+  // "close" waits for stderr to drain, so the failure dialog shows the complete tail.
+  proc.on("close", (code) => {
     if (child === proc) child = null;
     if (quitting || mine !== generation) return;
     if (code === 0) {
       void boot();
       return;
     }
-    dialog.showErrorBox("cursor-sdk2api", `Gateway exited with code ${code ?? "unknown"}.`);
+    dialog.showErrorBox(
+      "cursor-sdk2api",
+      failureDetail(`Gateway exited with code ${code ?? "unknown"}.`, proc, loaded.logDir),
+    );
   });
   try {
     await waitForHealth(loaded.settings.port, mine);
@@ -118,7 +142,7 @@ async function boot() {
     if (error instanceof Error && error.message === "stale") return;
     dialog.showErrorBox(
       "cursor-sdk2api",
-      error instanceof Error ? error.message : "Gateway did not start",
+      failureDetail(error instanceof Error ? error.message : "Gateway did not start", proc, loaded.logDir),
     );
     return;
   }

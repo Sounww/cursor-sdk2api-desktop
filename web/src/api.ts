@@ -61,6 +61,40 @@ export async function getConsoleModels(): Promise<ConsoleModelCatalog> {
   return (await response.json()) as ConsoleModelCatalog;
 }
 
+export interface LogEntry {
+  time?: string;
+  level: "info" | "warn" | "error";
+  msg: string;
+  fields: Record<string, unknown>;
+}
+
+export interface LogFileInfo {
+  date: string;
+  size: number;
+}
+
+export type LogPage =
+  | { enabled: false; files: []; entries: [] }
+  | {
+      enabled: true;
+      dir: string;
+      today: string;
+      date: string;
+      files: LogFileInfo[];
+      entries: LogEntry[];
+      next_offset: number;
+    };
+
+export async function getLogs(options: { date?: string; offset?: number } = {}): Promise<LogPage> {
+  const query = new URLSearchParams();
+  if (options.date) query.set("date", options.date);
+  if (options.offset !== undefined) query.set("offset", String(options.offset));
+  const search = query.toString();
+  const response = await fetch(search ? `/v0/management/logs?${search}` : "/v0/management/logs");
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return (await response.json()) as LogPage;
+}
+
 export async function getAccount(apiKey: string): Promise<AccountPayload> {
   return getJson<AccountPayload>("/v1/account", apiKey);
 }

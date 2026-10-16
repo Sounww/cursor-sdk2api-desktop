@@ -7,6 +7,7 @@ import type { CursorSandResult } from "../../src/account/cursor-dashboard.js";
 import { SystemClock, type Clock } from "../../src/clock.js";
 import { loadConfig, type GatewayConfig } from "../../src/config.js";
 import { createLogger } from "../../src/log.js";
+import type { DailyLogFile } from "../../src/log-file.js";
 import type { PumpBoundary } from "../../src/core/event-pump.js";
 import { createApp, type App } from "../../src/server/app.js";
 import { FakeSdk, type FakeSdkOptions } from "../fixtures/fake-sdk.js";
@@ -31,6 +32,7 @@ export async function startTestApp(
     sandHealth?: import("../../src/sdk/sand-loader.js").SandLoaderHealth;
     assertSandAccess?: (apiKey: string) => Promise<void>;
     onDesktopRestart?: () => void;
+    logFile?: DailyLogFile;
   } = {},
 ): Promise<TestContext> {
   const clock = options.clock ?? new SystemClock();
@@ -56,7 +58,7 @@ export async function startTestApp(
           logs.push(JSON.stringify({ fields, message }));
         },
       }
-    : createLogger("error");
+    : createLogger("error", { sink: options.logFile });
   const app = createApp({
     config,
     sdk,
@@ -72,6 +74,7 @@ export async function startTestApp(
     },
     assertSandAccess: options.assertSandAccess,
     onDesktopRestart: options.onDesktopRestart,
+    logFile: options.logFile,
   });
   const server = createServer((req, res) => {
     void app.handler(req, res);

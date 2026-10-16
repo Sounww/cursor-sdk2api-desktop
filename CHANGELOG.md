@@ -13,6 +13,7 @@
 
 ## Unreleased
 
+- Logs are also written to daily owner-only files `gateway-YYYY-MM-DD.log` under `LOG_DIR` (default `$STATE_DIR/logs`, desktop `%APPDATA%/cursor-sdk2api/logs`), kept for `LOG_RETENTION_DAYS` (default 14). `LOG_FILE=0` turns them off. The files also capture redacted third-party `console.warn` / `console.error` output and uncaught exceptions. A new Operator Console Logs page shows each day's file with level and text filters and 2-second auto refresh. The desktop error dialog now shows the gateway's last stderr lines and the log folder.
 - Managed-account concurrency now defaults to 8 global and 8 per credential, so Claude Code subagents are not rejected once two runs exist. A run that already produced output and whose client disconnected no longer counts toward that limit.
 - An explicit effort now replaces a Cursor variant tier embedded in the model id. `grok-4.7-high-fast` with `reasoning_effort: "xhigh"` is sent as `grok-4.7-xhigh-fast` plus `effort=xhigh`. Claude Code's `output_config.effort` is read the same way. Grok 4.7 is then sent to Cursor as registry id `grok-4.7` with `reasoning_effort` and `context=256k`, because `effort` and the 500k default are rejected as invalid registry parameters.
 - A latest user turn may mix `tool_result` with new text or images. The gateway still resolves the pending tool batch, and attaches that extra text and any base64 images to the last result instead of rejecting the request.

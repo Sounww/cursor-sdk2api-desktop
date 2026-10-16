@@ -24,7 +24,9 @@ and restrict `/console/` and `/v0/management/*`.
 
 `npm run desktop:dev` builds the gateway and opens a local Electron window. `npm run desktop:pack` checks that Electron's Node is at least 22.19, then builds an NSIS installer under `release/`. Neither script runs in CI.
 
-The window is a single-user console bound to `127.0.0.1`. The listen port and gateway access key are stored in `%APPDATA%/cursor-sdk2api/desktop-settings.json`; account state is `%APPDATA%/cursor-sdk2api/state`. Saving either value from Quick start restarts the gateway. Docker and `node dist/index.js` ignore that file and keep using `PORT`, `HOST`, `AUTH_MODE`, and `GATEWAY_ACCESS_KEY`.
+The window is a single-user console bound to `127.0.0.1`. The listen port and gateway access key are stored in `%APPDATA%/cursor-sdk2api/desktop-settings.json`; account state is `%APPDATA%/cursor-sdk2api/state`; logs are `%APPDATA%/cursor-sdk2api/logs`. Saving either value from Quick start restarts the gateway. Docker and `node dist/index.js` ignore that file and keep using `PORT`, `HOST`, `AUTH_MODE`, and `GATEWAY_ACCESS_KEY`.
+
+The packaged app has no console window, so the gateway's output goes to the daily log files and the console Logs page (see Logs below). If the gateway exits before it is ready, the error dialog shows the last stderr lines and the log folder.
 
 The pack step leaves the app unpacked (`asar: false`) and does not rebuild native modules. `@cursor/sdk` keeps its prebuilt `@cursor/sdk-win32-x64` package, and the gateway process is Electron's Node via `ELECTRON_RUN_AS_NODE`.
 
@@ -95,6 +97,12 @@ Set `STATE_DIR` for:
 Host / local-dev default (no `STATE_DIR`) is a process temp path: `$TMPDIR/cursor-sdk2api/state`. The container **image** and `docker-compose.yml` default `STATE_DIR` to `/data` and compose declares a named volume. A bare `docker run` without `-e STATE_DIR` still gets `/data` from the image `ENV`.
 
 Lineage schema v2 stores only session id, SDK agent id, credential fingerprint, model and explicit model parameters, canonical session-policy and executable-tool-catalog digests, state, pending tool ids and names, optional result digest, and timestamps. It does not store API keys, prompts, tool schemas/args/results, or assistant bodies. Older/incomplete lineage is quarantined and fails closed. Pending tool results can resume the persisted SDK Agent after restart when the client resends the exact tool catalog and pending id batch. Assistant replay bodies are **not** persisted, so duplicate-same replay after a later restart is still unavailable.
+
+## Logs
+
+Besides stdout/stderr, the gateway appends each log line to `$LOG_DIR/gateway-YYYY-MM-DD.log`, one file per local day. `LOG_DIR` defaults to `$STATE_DIR/logs` (desktop: `%APPDATA%/cursor-sdk2api/logs`). The directory is `0700` and files are `0600`. Files older than `LOG_RETENTION_DAYS` (default 14, range 1–365) are deleted at startup and when the day changes. `LOG_FILE=0` turns the files off and keeps stdout only. A file that cannot be written disables file logging for that process instead of stopping the gateway.
+
+The files hold the gateway's structured lines, third-party `console.warn` / `console.error` output (for example SDK diagnostics) after secret redaction and truncation to 4000 characters, and uncaught exceptions. The Operator Console Logs page reads them through `GET /v0/management/logs?date=YYYY-MM-DD&offset=N`.
 
 Session/registry TTL and the periodic sweep share the same clock. Completed and recoverable pending lineage expire with `SESSION_TTL_MS` (default 30 minutes), then they are deleted. Graceful shutdown does not delete recoverable lineage.
 

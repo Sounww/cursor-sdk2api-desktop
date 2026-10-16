@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 import { loadConfig } from "./config.js";
 import { SystemClock } from "./clock.js";
-import { createLogger } from "./log.js";
+import { captureConsole, createLogger, installCrashLogging } from "./log.js";
+import { DailyLogFile } from "./log-file.js";
 import { createApp } from "./server/app.js";
 import { createCursorRuntime } from "./sdk/cursor-runtime.js";
 import { ensureEmptyWorkspace } from "./sdk/empty-workspace.js";
 import { configureSdkOutboundProxy } from "./sdk/proxy.js";
 
 const config = loadConfig();
-const logger = createLogger(config.logLevel);
+const logFile = openLogFile();
+const logger = createLogger(config.logLevel, { sink: logFile });
+if (logFile) captureConsole(logFile);
+installCrashLogging(logger);
 const proxy = configureSdkOutboundProxy();
 const sdk = createCursorRuntime({ stateDir: config.stateDir });
 const workspaceDir = ensureEmptyWorkspace(config.instanceId, config.emptyWorkspaceDir);
@@ -20,6 +24,7 @@ const app = createApp({
   clock: new SystemClock(),
   logger,
   workspaceDir,
+  logFile,
   onDesktopRestart() {
     void shutdown("desktop-settings", 3_000);
   },
@@ -36,9 +41,28 @@ logger.info(
     proxy_configured: proxy.configured,
     agent_transport: proxy.agentTransport,
     fetch_transport: proxy.fetchTransport,
+    log_file: Boolean(logFile),
   },
   "cursor-sdk2api listening",
 );
+
+function openLogFile(): DailyLogFile | undefined {
+  if (!config.logFile) return undefined;
+  try {
+    return new DailyLogFile({ dir: config.logDir, retentionDays: config.logRetentionDays });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        time: new Date().toISOString(),
+        level: "error",
+        msg: "log file unavailable",
+        service: "cursor-sdk2api",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return undefined;
+  }
+}
 
 async function shutdown(signal: string, deadlineMs = config.runDeadlineMs): Promise<void> {
   if (stopping) return;
